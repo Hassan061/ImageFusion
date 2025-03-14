@@ -2,15 +2,21 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Cog6ToothIcon } from '@heroicons/react/24/outline';
+import { Cog6ToothIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useStore } from '@/store/slideshowStore';
 
 export default function Settings() {
   const [isOpen, setIsOpen] = useState(false);
-  const { settings, updateSettings } = useStore();
+  const { settings, updateSettings, images, clearImages } = useStore();
 
   const handleChange = (key: keyof typeof settings, value: any) => {
     updateSettings({ [key]: value });
+  };
+
+  const handleClearImages = () => {
+    if (window.confirm('Are you sure you want to clear all images? This action cannot be undone.')) {
+      clearImages();
+    }
   };
 
   return (
@@ -73,6 +79,26 @@ export default function Settings() {
                 </select>
               </div>
 
+              {settings.transitionEffect !== 'none' && (
+                <div>
+                  <label className="block text-sm font-medium text-white/70 mb-1">
+                    Transition Duration (seconds)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    max="1"
+                    value={settings.transitionDuration}
+                    onChange={(e) => handleChange('transitionDuration', parseFloat(e.target.value))}
+                    className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-white/50 mt-1">
+                    Controls the speed of transition effects (0.1 - 1.0 seconds)
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-white/70 mb-1">
                   Name Position
@@ -128,6 +154,19 @@ export default function Settings() {
                 </div>
               </div>
             </div>
+
+            {/* Clear Images Button */}
+            {images.length > 0 && (
+              <div className="mt-6 pt-4 border-t border-white/10">
+                <button
+                  onClick={handleClearImages}
+                  className="w-full flex items-center justify-center gap-2 text-red-400 hover:text-red-300 text-sm opacity-60 hover:opacity-100 transition-all"
+                >
+                  <TrashIcon className="w-4 h-4" />
+                  Clear All Images
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

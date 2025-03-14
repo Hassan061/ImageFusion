@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
-import { PlayIcon, PauseIcon, PhotoIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon } from '@heroicons/react/24/solid';
+import { PlayIcon, PauseIcon, PhotoIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, TrashIcon } from '@heroicons/react/24/solid';
 import { useStore } from '@/store/slideshowStore';
 import NameManager from '@/components/NameManager';
 import Settings from '@/components/Settings';
@@ -19,7 +19,8 @@ export default function Home() {
     addImage, 
     getRandomImageIndex,
     getRandomNamePermutation,
-    updateSettings 
+    updateSettings,
+    clearImages 
   } = useStore();
 
   // Update the current name
@@ -141,6 +142,14 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [isPlaying]);
 
+  // Handle clear images
+  const handleClearImages = () => {
+    if (window.confirm('Are you sure you want to clear all images? This action cannot be undone.')) {
+      clearImages();
+      setCurrentIndex(0);
+    }
+  };
+
   const getTransitionVariants = () => {
     switch (settings.transitionEffect) {
       case 'none':
@@ -204,7 +213,10 @@ export default function Home() {
             <motion.div
               key={`image-${currentIndex}`}
               {...getTransitionVariants()}
-              transition={{ duration: settings.transitionEffect === 'none' ? 0 : 0.5 }}
+              transition={{ 
+                duration: settings.transitionEffect === 'none' ? 0 : settings.transitionDuration,
+                ease: "easeInOut"
+              }}
               className="absolute inset-0"
             >
               <img
@@ -229,7 +241,10 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
+              transition={{ 
+                duration: settings.transitionDuration * 0.5,  // Text transitions are faster
+                ease: "easeInOut"
+              }}
               className={`absolute inset-0 flex justify-center ${getPositionClass()}`}
             >
               <div className="bg-black/50 backdrop-blur-sm px-8 py-4 rounded-lg">

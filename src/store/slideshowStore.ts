@@ -16,11 +16,13 @@ interface SlideshowState {
     imageTransitionSpeed: number;
     textTransitionSpeed: number;
     transitionEffect: 'none' | 'fade' | 'slide' | 'zoom';
+    transitionDuration: number;  // Duration in seconds for transition effects
     namePosition: 'top' | 'center' | 'bottom';
     isFullscreen: boolean;
   };
   addImage: (image: string) => void;
   removeImage: (index: number) => void;
+  clearImages: () => void;
   addName: (firstName: string, lastName: string) => void;
   removeName: (index: number) => void;
   updateSettings: (settings: Partial<SlideshowState['settings']>) => void;
@@ -48,9 +50,10 @@ const DEFAULT_SETTINGS = {
   imageWidth: 633,
   imageHeight: 866,
   imageFit: 'contain' as const,
-  imageTransitionSpeed: 2000,
+  imageTransitionSpeed: 1000,
   textTransitionSpeed: 2000,
-  transitionEffect: 'fade' as const,
+  transitionEffect: 'none' as const,
+  transitionDuration: 0.2,  // 200ms default for transition effects
   namePosition: 'top' as const,
   isFullscreen: false,
 };
@@ -75,6 +78,10 @@ export const useStore = create<SlideshowState>()(
       removeImage: (index) =>
         set((state) => ({
           images: state.images.filter((_, i) => i !== index),
+        })),
+      clearImages: () =>
+        set(() => ({
+          images: [],
         })),
       addName: (firstName, lastName) =>
         set((state) => ({
@@ -112,6 +119,7 @@ export const useStore = create<SlideshowState>()(
     {
       name: 'slideshow-storage',
       partialize: (state) => ({
+        images: state.images,
         names: state.names,
         settings: state.settings,
       }),
