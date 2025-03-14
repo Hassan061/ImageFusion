@@ -1,9 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
-import { PlayIcon, PauseIcon, PhotoIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, TrashIcon } from '@heroicons/react/24/solid';
+import {
+  PlayIcon,
+  PauseIcon,
+  PhotoIcon,
+  ArrowsPointingOutIcon,
+  ArrowsPointingInIcon
+} from '@heroicons/react/24/solid';
 import { useStore } from '@/store/slideshowStore';
 import NameManager from '@/components/NameManager';
 import Settings from '@/components/Settings';
@@ -13,15 +19,22 @@ export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentName, setCurrentName] = useState('');
-  const { 
-    images, 
-    names, 
-    settings, 
-    addImage, 
+  // State to toggle entire UI visibility
+  const [uiHidden, setUIHidden] = useState(false);
+  // State to toggle slider controls panel visibility
+  const [showSliders, setShowSliders] = useState(false);
+
+  const sliderRef = useRef<HTMLDivElement>(null);
+
+  const {
+    images,
+    names,
+    settings,
+    addImage,
     getRandomImageIndex,
     getRandomNamePermutation,
     updateSettings,
-    clearImages 
+    clearImages
   } = useStore();
 
   // Update the current name
@@ -76,10 +89,7 @@ export default function Home() {
     accept: {
       'image/*': ['.png', '.jpg', '.jpeg', '.gif']
     },
-    multiple: true,
-    onDragEnter: () => {},
-    onDragOver: () => {},
-    onDragLeave: () => {}
+    multiple: true
   });
 
   // Image transition effect
@@ -104,38 +114,14 @@ export default function Home() {
     return () => clearInterval(textInterval);
   }, [isPlaying, names, settings.textTransitionSpeed]);
 
-  // Handle fullscreen toggle
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
-      updateSettings({ isFullscreen: true });
-    } else {
-      document.exitFullscreen();
-      updateSettings({ isFullscreen: false });
-    }
-  };
-
-  // Handle fullscreen change event
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      if (!document.fullscreenElement) {
-        updateSettings({ isFullscreen: false });
-      }
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, [updateSettings]);
-
-  // Update keyboard shortcuts
+  // Keyboard shortcuts: Space to play/pause, F to toggle UI visibility
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         e.preventDefault();
         setIsPlaying(!isPlaying);
       } else if (e.code === 'KeyF') {
-        e.preventDefault();
-        toggleFullscreen();
+        setUIHidden(prev => !prev);
       }
     };
 
@@ -143,13 +129,20 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [isPlaying]);
 
-  // Handle clear images
-  const handleClearImages = () => {
-    if (window.confirm('Are you sure you want to clear all images? This action cannot be undone.')) {
-      clearImages();
-      setCurrentIndex(0);
+  // Close slider panel if clicking outside of it
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sliderRef.current && !sliderRef.current.contains(e.target as Node)) {
+        setShowSliders(false);
+      }
+    };
+    if (showSliders) {
+      document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      document.removeEventListener('mousedown', handleClickOutside);
     }
-  };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSliders]);
 
   const getTransitionVariants = () => {
     switch (settings.transitionEffect) {
@@ -214,7 +207,7 @@ export default function Home() {
             <motion.div
               key={`image-${currentIndex}`}
               {...getTransitionVariants()}
-              transition={{ 
+              transition={{
                 duration: settings.transitionEffect === 'none' ? 0 : Math.max(0.1, settings.transitionDuration),
                 ease: "easeInOut"
               }}
@@ -242,7 +235,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              transition={{ 
+              transition={{
                 duration: Math.max(0.1, settings.transitionDuration * 0.5),
                 ease: "easeInOut"
               }}
@@ -261,9 +254,9 @@ export default function Home() {
       {/* Onboarding - Show when no images */}
       {images.length === 0 && <Onboarding />}
 
-      {/* UI Elements - Only show when not in fullscreen */}
+      {/* UI Elements (only show if UI is not hidden) */}
       <AnimatePresence>
-        {!settings.isFullscreen && (
+        {!uiHidden && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -273,23 +266,102 @@ export default function Home() {
             {/* Name Manager */}
             <NameManager />
 
-            {/* Upload Button */}
-            <div
-              {...getRootProps()}
-              className={`fixed top-8 right-8 bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all z-20 ${
-                isDragActive ? 'bg-blue-500/20 ring-2 ring-blue-500' : ''
-              }`}
-              title="Upload Images"
-            >
-              <input {...getInputProps()} />
-              <PhotoIcon className="w-6 h-6 text-white" />
+            {/* Top Right Controls */}
+            <div className="fixed top-8 right-8 z-20 flex flex-col items-end space-y-4">
+              {/* Upload Button */}
+              <div
+                {...getRootProps()}
+                className={`bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all ${
+                  isDragActive ? 'bg-blue-500/20 ring-2 ring-blue-500' : ''
+                }`}
+                title="Upload Images"
+              >
+                <input {...getInputProps()} />
+                <PhotoIcon className="w-6 h-6 text-white" />
+              </div>
+              
+              {/* Button to toggle slider panel */}
+              <button
+                onClick={() => setShowSliders(prev => !prev)}
+                className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
+                title="Show Sliders"
+              >
+                <span className="text-white text-sm">Sliders</span>
+              </button>
             </div>
 
-            {/* Settings */}
-            <Settings />
+            {/* Slider Controls Panel */}
+            {showSliders && (
+              <div ref={sliderRef} className="fixed top-24 right-8 z-20 bg-white/10 p-4 rounded-lg backdrop-blur-sm text-white w-64 space-y-3">
+                <div>
+                  <label className="block text-sm">
+                    Image Transition Speed (ms): {settings.imageTransitionSpeed}
+                  </label>
+                  <input
+                    type="range"
+                    min="100"
+                    max="3000"
+                    step="100"
+                    value={settings.imageTransitionSpeed}
+                    onChange={(e) =>
+                      updateSettings({ imageTransitionSpeed: parseInt(e.target.value) })
+                    }
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm">
+                    Text Transition Speed (ms): {settings.textTransitionSpeed}
+                  </label>
+                  <input
+                    type="range"
+                    min="100"
+                    max="3000"
+                    step="100"
+                    value={settings.textTransitionSpeed}
+                    onChange={(e) =>
+                      updateSettings({ textTransitionSpeed: parseInt(e.target.value) })
+                    }
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm">
+                    Image Width (px): {settings.imageWidth}
+                  </label>
+                  <input
+                    type="range"
+                    min="100"
+                    max="3840"
+                    step="10"
+                    value={settings.imageWidth}
+                    onChange={(e) =>
+                      updateSettings({ imageWidth: parseInt(e.target.value) })
+                    }
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm">
+                    Image Height (px): {settings.imageHeight}
+                  </label>
+                  <input
+                    type="range"
+                    min="100"
+                    max="2160"
+                    step="10"
+                    value={settings.imageHeight}
+                    onChange={(e) =>
+                      updateSettings({ imageHeight: parseInt(e.target.value) })
+                    }
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            )}
 
-            {/* Controls */}
-            <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4">
+            {/* Bottom Controls */}
+            <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4 z-20">
               <button
                 onClick={() => setIsPlaying(!isPlaying)}
                 className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
@@ -300,20 +372,27 @@ export default function Home() {
                   <PlayIcon className="w-6 h-6 text-white" />
                 )}
               </button>
+              {/* Immersive icon toggles UI visibility */}
               <button
-                onClick={toggleFullscreen}
+                onClick={() => setUIHidden(prev => !prev)}
                 className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
+                title="Toggle UI"
               >
-                {settings.isFullscreen ? (
+                {uiHidden ? (
                   <ArrowsPointingInIcon className="w-6 h-6 text-white" />
                 ) : (
                   <ArrowsPointingOutIcon className="w-6 h-6 text-white" />
                 )}
               </button>
             </div>
+
+            {/* Return the Settings widget at the bottom right */}
+            <div className="fixed bottom-8 right-8 z-20">
+              <Settings />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
     </main>
   );
-} 
+}
