@@ -17,8 +17,8 @@ interface SlideshowState {
     textTransitionSpeed: number;
     transitionEffect: 'none' | 'fade' | 'slide' | 'zoom';
     transitionDuration: number;  // Duration in seconds for transition effects
-    namePosition: 'top' | 'center' | 'bottom';
     isFullscreen: boolean;
+    theme: 'light' | 'dark';
   };
   addImage: (image: string) => void;
   removeImage: (index: number) => void;
@@ -54,8 +54,8 @@ const DEFAULT_SETTINGS = {
   textTransitionSpeed: 2000,
   transitionEffect: 'none' as const,
   transitionDuration: 0.2,  // 200ms default for transition effects
-  namePosition: 'top' as const,
   isFullscreen: false,
+  theme: 'dark' as const,
 };
 
 export const useStore = create<SlideshowState>()(

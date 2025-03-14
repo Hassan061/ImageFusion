@@ -23,19 +23,29 @@ export default function Home() {
   const [uiHidden, setUIHidden] = useState(false);
   // State to toggle slider controls panel visibility
   const [showSliders, setShowSliders] = useState(false);
+  // State for text dragging
+  const [hasBeenDragged, setHasBeenDragged] = useState(false);
+  const [textPosition, setTextPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
 
   const sliderRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+  const dragStartRef = useRef({ mouseX: 0, mouseY: 0, posX: 0, posY: 0 });
 
   const {
     images,
     names,
     settings,
     addImage,
-    getRandomImageIndex,
-    getRandomNamePermutation,
+    removeImage,
+    clearImages,
     updateSettings,
-    clearImages
+    getRandomNamePermutation,
+    getRandomImageIndex
   } = useStore();
+
+  // Get theme from settings
+  const { theme } = settings;
 
   // Update the current name
   const updateCurrentName = () => {
@@ -144,6 +154,73 @@ export default function Home() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showSliders]);
 
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+      
+      // Calculate delta from start position
+      const deltaX = e.clientX - dragStartRef.current.mouseX;
+      const deltaY = e.clientY - dragStartRef.current.mouseY;
+      
+      // Update position with the precise delta
+      setTextPosition({
+        x: dragStartRef.current.posX + deltaX,
+        y: dragStartRef.current.posY + deltaY
+      });
+    };
+    
+    const handleMouseUp = () => {
+      if (isDragging) {
+        setIsDragging(false);
+      }
+    };
+    
+    // Add event listeners
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
+
+  useEffect(() => {
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isDragging || e.touches.length === 0) return;
+      
+      const touch = e.touches[0];
+      
+      // Calculate delta from start position
+      const deltaX = touch.clientX - dragStartRef.current.mouseX;
+      const deltaY = touch.clientY - dragStartRef.current.mouseY;
+      
+      // Update position with the precise delta
+      setTextPosition({
+        x: dragStartRef.current.posX + deltaX,
+        y: dragStartRef.current.posY + deltaY
+      });
+      
+      // Prevent scrolling
+      e.preventDefault();
+    };
+    
+    const handleTouchEnd = () => {
+      if (isDragging) {
+        setIsDragging(false);
+      }
+    };
+    
+    // Add touch event listeners
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
+    
+    return () => {
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [isDragging]);
+
   const getTransitionVariants = () => {
     switch (settings.transitionEffect) {
       case 'none':
@@ -173,17 +250,6 @@ export default function Home() {
     }
   };
 
-  const getPositionClass = () => {
-    switch (settings.namePosition) {
-      case 'top':
-        return 'items-start pt-8';
-      case 'bottom':
-        return 'items-end pb-8';
-      default:
-        return 'items-center';
-    }
-  };
-
   const getImageFitClass = () => {
     switch (settings.imageFit) {
       case 'contain':
@@ -200,7 +266,7 @@ export default function Home() {
   return (
     <main className="min-h-screen relative">
       {/* Slideshow Container */}
-      <div className="fixed inset-0 bg-black">
+      <div className={`fixed inset-0 ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}>
         {/* Image Container */}
         <AnimatePresence mode={settings.transitionEffect === 'none' ? 'sync' : 'wait'}>
           {images.length > 0 && (
@@ -227,28 +293,111 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        {/* Text Container */}
-        <AnimatePresence mode="wait">
-          {names.length > 0 && currentName && (
-            <motion.div
-              key={`text-${currentName}`}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{
-                duration: Math.max(0.1, settings.transitionDuration * 0.5),
-                ease: "easeInOut"
+        {/* Text container with perfect manual positioning */}
+        {currentName && (
+          <div className="absolute inset-0 z-30 pointer-events-none">
+            <div
+              ref={textRef}
+              className={`absolute px-8 py-4 rounded-lg select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'} ${
+                theme === 'dark' 
+                  ? 'bg-black/50 backdrop-blur-sm' 
+                  : 'bg-white/60 backdrop-blur-sm'
+              }`}
+              style={{
+                pointerEvents: 'auto',
+                left: hasBeenDragged ? `calc(50% + ${textPosition.x}px)` : '50%',
+                top: hasBeenDragged 
+                  ? `calc(50% + ${textPosition.y}px)` 
+                  : '50%', // Default to center if never dragged
+                transform: isDragging 
+                  ? 'translate(-50%, -50%) scale(1.02)' 
+                  : 'translate(-50%, -50%)',
+                boxShadow: isDragging 
+                  ? '0 10px 25px rgba(0, 0, 0, 0.25)' 
+                  : '0 4px 8px rgba(0, 0, 0, 0.1)',
+                transition: 'box-shadow 0.2s, transform 0.2s',
+                // Prevent text selection
+                userSelect: 'none',
+                // Prevent touch scrolling
+                touchAction: 'none'
               }}
-              className={`absolute inset-0 flex justify-center ${getPositionClass()}`}
+              // Mouse down handler
+              onMouseDown={(e) => {
+                // Prevent default browser behavior
+                e.preventDefault();
+                
+                // Mark as dragged if this is the first time
+                if (!hasBeenDragged) {
+                  setHasBeenDragged(true);
+                }
+                
+                // Store starting positions
+                dragStartRef.current = {
+                  mouseX: e.clientX,
+                  mouseY: e.clientY,
+                  posX: textPosition.x,
+                  posY: textPosition.y
+                };
+                
+                // Start dragging
+                setIsDragging(true);
+              }}
+              // Touch start handler
+              onTouchStart={(e) => {
+                // Prevent scrolling
+                e.preventDefault();
+                
+                // Mark as dragged if this is the first time
+                if (!hasBeenDragged) {
+                  setHasBeenDragged(true);
+                }
+                
+                // Only process first touch
+                if (e.touches.length > 0) {
+                  const touch = e.touches[0];
+                  
+                  // Store starting positions
+                  dragStartRef.current = {
+                    mouseX: touch.clientX,
+                    mouseY: touch.clientY,
+                    posX: textPosition.x,
+                    posY: textPosition.y
+                  };
+                  
+                  // Start dragging
+                  setIsDragging(true);
+                }
+              }}
             >
-              <div className="bg-black/50 backdrop-blur-sm px-8 py-4 rounded-lg">
-                <h2 className="text-4xl font-bold text-white">
+              <AnimatePresence mode="wait">
+                <motion.h2
+                  key={currentName}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className={`text-4xl font-bold whitespace-nowrap ${
+                    theme === 'dark' ? 'text-white' : 'text-gray-800'
+                  }`}
+                >
                   {currentName}
-                </h2>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                </motion.h2>
+              </AnimatePresence>
+            </div>
+          </div>
+        )}
+
+        {/* Persistent Exit Immersive Mode Button */}
+        {uiHidden && (
+          <div className="fixed top-4 right-4 z-50">
+            <button
+              onClick={() => setUIHidden(false)}
+              className="p-2 bg-black/40 hover:bg-black/60 rounded-full backdrop-blur-sm transition-colors"
+            >
+              <ArrowsPointingInIcon className="w-5 h-5 text-white" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Onboarding - Show when no images */}

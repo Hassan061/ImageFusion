@@ -119,16 +119,15 @@ export default function SettingsPage() {
                 <div className="grid gap-6 md:grid-cols-2">
                   <div>
                     <label className="block text-sm font-medium text-white/70 mb-2">
-                      Name Position
+                      Theme Mode
                     </label>
                     <select
-                      value={settings.namePosition}
-                      onChange={(e) => handleChange('namePosition', e.target.value)}
+                      value={settings.theme}
+                      onChange={(e) => handleChange('theme', e.target.value)}
                       className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="top">Top</option>
-                      <option value="center">Center</option>
-                      <option value="bottom">Bottom</option>
+                      <option value="dark">Dark Mode</option>
+                      <option value="light">Light Mode</option>
                     </select>
                   </div>
                   <div>
