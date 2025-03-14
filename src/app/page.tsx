@@ -7,6 +7,7 @@ import { PlayIcon, PauseIcon, PhotoIcon, ArrowsPointingOutIcon, ArrowsPointingIn
 import { useStore } from '@/store/slideshowStore';
 import NameManager from '@/components/NameManager';
 import Settings from '@/components/Settings';
+import Onboarding from '@/components/Onboarding';
 
 export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -242,7 +243,7 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ 
-                duration: settings.transitionDuration * 0.5,  // Text transitions are faster
+                duration: settings.transitionDuration * 0.5,
                 ease: "easeInOut"
               }}
               className={`absolute inset-0 flex justify-center ${getPositionClass()}`}
@@ -257,6 +258,9 @@ export default function Home() {
         </AnimatePresence>
       </div>
 
+      {/* Onboarding - Show when no images */}
+      {images.length === 0 && <Onboarding />}
+
       {/* UI Elements - Only show when not in fullscreen */}
       <AnimatePresence>
         {!settings.isFullscreen && (
@@ -268,6 +272,18 @@ export default function Home() {
           >
             {/* Name Manager */}
             <NameManager />
+
+            {/* Upload Button */}
+            <div
+              {...getRootProps()}
+              className={`fixed top-8 right-8 bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all z-20 ${
+                isDragActive ? 'bg-blue-500/20 ring-2 ring-blue-500' : ''
+              }`}
+              title="Upload Images"
+            >
+              <input {...getInputProps()} />
+              <PhotoIcon className="w-6 h-6 text-white" />
+            </div>
 
             {/* Settings */}
             <Settings />
@@ -294,17 +310,6 @@ export default function Home() {
                   <ArrowsPointingOutIcon className="w-6 h-6 text-white" />
                 )}
               </button>
-            </div>
-
-            {/* Upload Area */}
-            <div
-              {...getRootProps()}
-              className={`fixed top-8 right-8 p-4 rounded-lg border-2 border-dashed transition-colors ${
-                isDragActive ? 'border-blue-500 bg-blue-500/10' : 'border-gray-600'
-              }`}
-            >
-              <input {...getInputProps()} />
-              <PhotoIcon className="w-8 h-8 text-gray-400" />
             </div>
           </motion.div>
         )}
