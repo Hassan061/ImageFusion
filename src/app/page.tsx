@@ -376,9 +376,10 @@ export default function Home() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.3 }}
-                  className={`text-4xl font-bold whitespace-nowrap ${
+                  className={`font-bold whitespace-nowrap ${
                     theme === 'dark' ? 'text-white' : 'text-gray-800'
                   }`}
+                  style={{ fontSize: `${settings.textSize}px` }}
                 >
                   {currentName}
                 </motion.h2>
@@ -485,6 +486,22 @@ export default function Home() {
                     value={settings.textTransitionSpeed}
                     onChange={(e) =>
                       updateSettings({ textTransitionSpeed: parseInt(e.target.value) })
+                    }
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm">
+                    Text Size (px): {settings.textSize}
+                  </label>
+                  <input
+                    type="range"
+                    min="16"
+                    max="100"
+                    step="1"
+                    value={settings.textSize}
+                    onChange={(e) =>
+                      updateSettings({ textSize: parseInt(e.target.value) })
                     }
                     className="w-full"
                   />

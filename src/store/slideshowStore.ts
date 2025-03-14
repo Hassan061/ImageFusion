@@ -19,6 +19,7 @@ interface SlideshowState {
     transitionDuration: number;  // Duration in seconds for transition effects
     isFullscreen: boolean;
     theme: 'light' | 'dark';
+    textSize: number; // Text size in pixels
   };
   addImage: (image: string) => void;
   removeImage: (index: number) => void;
@@ -56,6 +57,7 @@ const DEFAULT_SETTINGS = {
   transitionDuration: 0.2,  // 200ms default for transition effects
   isFullscreen: false,
   theme: 'dark' as const,
+  textSize: 36, // Default text size in pixels
 };
 
 export const useStore = create<SlideshowState>()(
