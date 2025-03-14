@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeftIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, TrashIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
 import { useStore } from '@/store/slideshowStore';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general');
   const { settings, updateSettings, images, clearImages } = useStore();
+  const router = useRouter();
 
   const handleChange = (key: keyof typeof settings, value: any) => {
     updateSettings({ [key]: value });
@@ -19,6 +21,18 @@ export default function SettingsPage() {
       clearImages();
     }
   };
+
+  // Handle escape key to exit settings
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        router.push('/');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [router]);
 
   const tabs = [
     { id: 'general', label: 'General' },
@@ -201,7 +215,11 @@ export default function SettingsPage() {
                         min="0.1"
                         max="1"
                         value={settings.transitionDuration}
-                        onChange={(e) => handleChange('transitionDuration', parseFloat(e.target.value))}
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value);
+                          // Ensure value is at least 0.1 seconds
+                          handleChange('transitionDuration', Math.max(0.1, value));
+                        }}
                         className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                       <p className="text-xs text-white/50 mt-1">
@@ -243,6 +261,20 @@ export default function SettingsPage() {
             </motion.div>
           )}
         </div>
+      </div>
+
+      {/* Settings button at bottom right */}
+      <Link
+        href="/"
+        className="fixed bottom-8 right-8 bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all z-20"
+        title="Back to Slideshow"
+      >
+        <Cog6ToothIcon className="w-6 h-6 text-white" />
+      </Link>
+
+      {/* Keyboard shortcut hint */}
+      <div className="fixed bottom-8 left-8 text-white/40 text-sm">
+        Press <kbd className="px-2 py-1 bg-white/10 rounded">Esc</kbd> to exit settings
       </div>
     </div>
   );

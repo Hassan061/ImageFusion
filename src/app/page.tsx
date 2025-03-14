@@ -215,7 +215,7 @@ export default function Home() {
               key={`image-${currentIndex}`}
               {...getTransitionVariants()}
               transition={{ 
-                duration: settings.transitionEffect === 'none' ? 0 : settings.transitionDuration,
+                duration: settings.transitionEffect === 'none' ? 0 : Math.max(0.1, settings.transitionDuration),
                 ease: "easeInOut"
               }}
               className="absolute inset-0"
@@ -243,7 +243,7 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ 
-                duration: settings.transitionDuration * 0.5,
+                duration: Math.max(0.1, settings.transitionDuration * 0.5),
                 ease: "easeInOut"
               }}
               className={`absolute inset-0 flex justify-center ${getPositionClass()}`}
