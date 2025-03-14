@@ -88,10 +88,10 @@ export default function Home() {
         
         // Get a random name permutation
         updateCurrentName();
-      }, settings.imageTransitionSpeed);
+      }, settings.transitionSpeed);
     }
     return () => clearInterval(interval);
-  }, [isPlaying, images.length, settings.imageTransitionSpeed, getRandomImageIndex, names]);
+  }, [isPlaying, images.length, settings.transitionSpeed, getRandomImageIndex, names]);
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -159,36 +159,32 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen relative overflow-hidden">
-      {/* Slideshow Container - Take full viewport */}
-      <div className="fixed inset-0 bg-black z-0">
+    <main className="min-h-screen relative">
+      {/* Slideshow Container */}
+      <div className="fixed inset-0 bg-black">
         <AnimatePresence mode={settings.transitionEffect === 'none' ? 'sync' : 'wait'}>
           {images.length > 0 && (
             <motion.div
               key={currentIndex}
               {...getTransitionVariants()}
               transition={{ duration: settings.transitionEffect === 'none' ? 0 : 0.5 }}
-              className="absolute inset-0 flex items-center justify-center"
+              className="absolute inset-0"
             >
               <img
                 src={images[currentIndex]}
                 alt={`Slide ${currentIndex + 1}`}
-                className={`${getImageFitClass()}`}
+                className={`w-full h-full ${getImageFitClass()}`}
                 style={{
-                  width: settings.imageFit === 'contain' ? 'auto' : '100%',
-                  height: settings.imageFit === 'contain' ? 'auto' : '100%',
-                  maxWidth: settings.imageFit === 'contain' ? '100%' : 'none',
-                  maxHeight: settings.imageFit === 'contain' ? '100%' : 'none',
-                  objectPosition: 'center'
+                  maxWidth: `${settings.imageWidth}px`,
+                  maxHeight: `${settings.imageHeight}px`,
+                  margin: '0 auto'
                 }}
               />
               {names.length > 0 && currentName && (
                 <div className={`absolute inset-0 flex justify-center ${getPositionClass()}`}>
                   <motion.div
-                    key={currentName}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: settings.textTransitionSpeed / 1000 }}
                     className="bg-black/50 backdrop-blur-sm px-8 py-4 rounded-lg"
                   >
                     <h2 className="text-4xl font-bold text-white">
@@ -202,42 +198,35 @@ export default function Home() {
         </AnimatePresence>
       </div>
 
-      {/* Overlay UI - All UI elements with higher z-index */}
-      <div className="fixed inset-0 pointer-events-none z-10">
-        {/* Name Manager - Only the button receives pointer events */}
-        <div className="pointer-events-auto">
-          <NameManager />
-        </div>
+      {/* Name Manager */}
+      <NameManager />
 
-        {/* Settings - Only the button receives pointer events */}
-        <div className="pointer-events-auto">
-          <Settings />
-        </div>
+      {/* Settings */}
+      <Settings />
 
-        {/* Controls - Only the button receives pointer events */}
-        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4 pointer-events-auto">
-          <button
-            onClick={() => setIsPlaying(!isPlaying)}
-            className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
-          >
-            {isPlaying ? (
-              <PauseIcon className="w-6 h-6 text-white" />
-            ) : (
-              <PlayIcon className="w-6 h-6 text-white" />
-            )}
-          </button>
-        </div>
-
-        {/* Upload Area - Only this area receives pointer events */}
-        <div
-          {...getRootProps()}
-          className={`fixed top-8 right-8 p-4 rounded-lg border-2 border-dashed transition-colors pointer-events-auto ${
-            isDragActive ? 'border-blue-500 bg-blue-500/10' : 'border-gray-600'
-          }`}
+      {/* Controls */}
+      <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4">
+        <button
+          onClick={() => setIsPlaying(!isPlaying)}
+          className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
         >
-          <input {...getInputProps()} />
-          <PhotoIcon className="w-8 h-8 text-gray-400" />
-        </div>
+          {isPlaying ? (
+            <PauseIcon className="w-6 h-6 text-white" />
+          ) : (
+            <PlayIcon className="w-6 h-6 text-white" />
+          )}
+        </button>
+      </div>
+
+      {/* Upload Area */}
+      <div
+        {...getRootProps()}
+        className={`fixed top-8 right-8 p-4 rounded-lg border-2 border-dashed transition-colors ${
+          isDragActive ? 'border-blue-500 bg-blue-500/10' : 'border-gray-600'
+        }`}
+      >
+        <input {...getInputProps()} />
+        <PhotoIcon className="w-8 h-8 text-gray-400" />
       </div>
     </main>
   );

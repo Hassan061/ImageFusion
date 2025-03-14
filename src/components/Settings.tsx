@@ -2,56 +2,25 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Cog6ToothIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon } from '@heroicons/react/24/outline';
+import { Cog6ToothIcon } from '@heroicons/react/24/outline';
 import { useStore } from '@/store/slideshowStore';
 
 export default function Settings() {
   const [isOpen, setIsOpen] = useState(false);
   const { settings, updateSettings } = useStore();
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const handleChange = (key: keyof typeof settings, value: any) => {
     updateSettings({ [key]: value });
   };
 
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => {
-        setIsFullscreen(true);
-      }).catch(err => {
-        console.error(`Error attempting to enable fullscreen: ${err.message}`);
-      });
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().then(() => {
-          setIsFullscreen(false);
-        }).catch(err => {
-          console.error(`Error attempting to exit fullscreen: ${err.message}`);
-        });
-      }
-    }
-  };
-
   return (
     <>
-      <div className="fixed bottom-8 right-8 flex gap-2">
-        <button
-          onClick={toggleFullscreen}
-          className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
-        >
-          {isFullscreen ? (
-            <ArrowsPointingInIcon className="w-6 h-6 text-white" />
-          ) : (
-            <ArrowsPointingOutIcon className="w-6 h-6 text-white" />
-          )}
-        </button>
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
-        >
-          <Cog6ToothIcon className="w-6 h-6 text-white" />
-        </button>
-      </div>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="fixed bottom-8 right-8 bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
+      >
+        <Cog6ToothIcon className="w-6 h-6 text-white" />
+      </button>
 
       <AnimatePresence>
         {isOpen && (
@@ -59,31 +28,19 @@ export default function Settings() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className="fixed bottom-24 right-8 bg-black/80 backdrop-blur-sm p-6 rounded-lg w-80 max-h-[80vh] overflow-y-auto"
+            className="fixed bottom-24 right-8 bg-black/80 backdrop-blur-sm p-6 rounded-lg w-80"
           >
             <h3 className="text-xl font-semibold mb-4 text-white">Settings</h3>
             
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-white/70 mb-1">
-                  Image Transition Speed (ms)
+                  Transition Speed (ms)
                 </label>
                 <input
                   type="number"
-                  value={settings.imageTransitionSpeed}
-                  onChange={(e) => handleChange('imageTransitionSpeed', parseInt(e.target.value))}
-                  className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-white/70 mb-1">
-                  Text Transition Speed (ms)
-                </label>
-                <input
-                  type="number"
-                  value={settings.textTransitionSpeed}
-                  onChange={(e) => handleChange('textTransitionSpeed', parseInt(e.target.value))}
+                  value={settings.transitionSpeed}
+                  onChange={(e) => handleChange('transitionSpeed', parseInt(e.target.value))}
                   className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>

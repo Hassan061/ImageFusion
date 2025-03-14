@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { NAMES_LIST } from '@/config/names';
 
 interface NameTuple {
   firstName: string;
@@ -13,8 +14,7 @@ interface SlideshowState {
     imageWidth: number;
     imageHeight: number;
     imageFit: 'contain' | 'cover' | 'fill';
-    imageTransitionSpeed: number;
-    textTransitionSpeed: number;
+    transitionSpeed: number;
     transitionEffect: 'none' | 'fade' | 'slide' | 'zoom';
     namePosition: 'top' | 'center' | 'bottom';
   };
@@ -25,19 +25,17 @@ interface SlideshowState {
   updateSettings: (settings: Partial<SlideshowState['settings']>) => void;
   getRandomImageIndex: () => number;
   getRandomNamePermutation: () => string;
-  clearNames: () => void;
 }
 
-// No default names for privacy in the GitHub version
-const DEFAULT_NAMES: NameTuple[] = [];
+// Use imported names from config file
+const DEFAULT_NAMES: NameTuple[] = NAMES_LIST;
 
 const MAX_IMAGES = 20; // Limit number of stored images
 const DEFAULT_SETTINGS = {
   imageWidth: 633,
   imageHeight: 866,
-  imageFit: 'cover' as const,
-  imageTransitionSpeed: 3000,
-  textTransitionSpeed: 1500,
+  imageFit: 'contain' as const,
+  transitionSpeed: 3000,
   transitionEffect: 'fade' as const,
   namePosition: 'top' as const,
 };
@@ -94,16 +92,11 @@ export const useStore = create<SlideshowState>()(
         const lastName = names[randomLastNameIndex].lastName;
         
         return `${firstName} ${lastName}`;
-      },
-      clearNames: () => 
-        set(() => ({
-          names: []
-        })),
+      }
     }),
     {
       name: 'slideshow-storage',
       partialize: (state) => ({
-        images: state.images,
         names: state.names,
         settings: state.settings,
       }),
