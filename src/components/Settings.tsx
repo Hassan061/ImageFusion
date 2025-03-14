@@ -35,12 +35,24 @@ export default function Settings() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-white/70 mb-1">
-                  Transition Speed (ms)
+                  Image Transition Speed (ms)
                 </label>
                 <input
                   type="number"
-                  value={settings.transitionSpeed}
-                  onChange={(e) => handleChange('transitionSpeed', parseInt(e.target.value))}
+                  value={settings.imageTransitionSpeed}
+                  onChange={(e) => handleChange('imageTransitionSpeed', parseInt(e.target.value))}
+                  className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-white/70 mb-1">
+                  Text Transition Speed (ms)
+                </label>
+                <input
+                  type="number"
+                  value={settings.textTransitionSpeed}
+                  onChange={(e) => handleChange('textTransitionSpeed', parseInt(e.target.value))}
                   className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>

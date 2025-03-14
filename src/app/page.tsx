@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
-import { PlayIcon, PauseIcon, PhotoIcon } from '@heroicons/react/24/solid';
+import { PlayIcon, PauseIcon, PhotoIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon } from '@heroicons/react/24/solid';
 import { useStore } from '@/store/slideshowStore';
 import NameManager from '@/components/NameManager';
 import Settings from '@/components/Settings';
@@ -18,7 +18,8 @@ export default function Home() {
     settings, 
     addImage, 
     getRandomImageIndex,
-    getRandomNamePermutation 
+    getRandomNamePermutation,
+    updateSettings 
   } = useStore();
 
   // Update the current name
@@ -79,25 +80,60 @@ export default function Home() {
     onDragLeave: () => {}
   });
 
+  // Image transition effect
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
+    let imageInterval: ReturnType<typeof setInterval>;
     if (isPlaying && images.length > 0) {
-      interval = setInterval(() => {
-        // Get a random image
+      imageInterval = setInterval(() => {
         setCurrentIndex(getRandomImageIndex());
-        
-        // Get a random name permutation
-        updateCurrentName();
-      }, settings.transitionSpeed);
+      }, settings.imageTransitionSpeed);
     }
-    return () => clearInterval(interval);
-  }, [isPlaying, images.length, settings.transitionSpeed, getRandomImageIndex, names]);
+    return () => clearInterval(imageInterval);
+  }, [isPlaying, images.length, settings.imageTransitionSpeed, getRandomImageIndex]);
 
+  // Text transition effect
+  useEffect(() => {
+    let textInterval: ReturnType<typeof setInterval>;
+    if (isPlaying && names.length > 0) {
+      textInterval = setInterval(() => {
+        updateCurrentName();
+      }, settings.textTransitionSpeed);
+    }
+    return () => clearInterval(textInterval);
+  }, [isPlaying, names, settings.textTransitionSpeed]);
+
+  // Handle fullscreen toggle
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+      updateSettings({ isFullscreen: true });
+    } else {
+      document.exitFullscreen();
+      updateSettings({ isFullscreen: false });
+    }
+  };
+
+  // Handle fullscreen change event
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        updateSettings({ isFullscreen: false });
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, [updateSettings]);
+
+  // Update keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         e.preventDefault();
         setIsPlaying(!isPlaying);
+      } else if (e.code === 'KeyF') {
+        e.preventDefault();
+        toggleFullscreen();
       }
     };
 
@@ -162,10 +198,11 @@ export default function Home() {
     <main className="min-h-screen relative">
       {/* Slideshow Container */}
       <div className="fixed inset-0 bg-black">
+        {/* Image Container */}
         <AnimatePresence mode={settings.transitionEffect === 'none' ? 'sync' : 'wait'}>
           {images.length > 0 && (
             <motion.div
-              key={currentIndex}
+              key={`image-${currentIndex}`}
               {...getTransitionVariants()}
               transition={{ duration: settings.transitionEffect === 'none' ? 0 : 0.5 }}
               className="absolute inset-0"
@@ -180,54 +217,83 @@ export default function Home() {
                   margin: '0 auto'
                 }}
               />
-              {names.length > 0 && currentName && (
-                <div className={`absolute inset-0 flex justify-center ${getPositionClass()}`}>
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-black/50 backdrop-blur-sm px-8 py-4 rounded-lg"
-                  >
-                    <h2 className="text-4xl font-bold text-white">
-                      {currentName}
-                    </h2>
-                  </motion.div>
-                </div>
-              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Text Container */}
+        <AnimatePresence mode="wait">
+          {names.length > 0 && currentName && (
+            <motion.div
+              key={`text-${currentName}`}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className={`absolute inset-0 flex justify-center ${getPositionClass()}`}
+            >
+              <div className="bg-black/50 backdrop-blur-sm px-8 py-4 rounded-lg">
+                <h2 className="text-4xl font-bold text-white">
+                  {currentName}
+                </h2>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* Name Manager */}
-      <NameManager />
+      {/* UI Elements - Only show when not in fullscreen */}
+      <AnimatePresence>
+        {!settings.isFullscreen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            {/* Name Manager */}
+            <NameManager />
 
-      {/* Settings */}
-      <Settings />
+            {/* Settings */}
+            <Settings />
 
-      {/* Controls */}
-      <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4">
-        <button
-          onClick={() => setIsPlaying(!isPlaying)}
-          className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
-        >
-          {isPlaying ? (
-            <PauseIcon className="w-6 h-6 text-white" />
-          ) : (
-            <PlayIcon className="w-6 h-6 text-white" />
-          )}
-        </button>
-      </div>
+            {/* Controls */}
+            <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4">
+              <button
+                onClick={() => setIsPlaying(!isPlaying)}
+                className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
+              >
+                {isPlaying ? (
+                  <PauseIcon className="w-6 h-6 text-white" />
+                ) : (
+                  <PlayIcon className="w-6 h-6 text-white" />
+                )}
+              </button>
+              <button
+                onClick={toggleFullscreen}
+                className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
+              >
+                {settings.isFullscreen ? (
+                  <ArrowsPointingInIcon className="w-6 h-6 text-white" />
+                ) : (
+                  <ArrowsPointingOutIcon className="w-6 h-6 text-white" />
+                )}
+              </button>
+            </div>
 
-      {/* Upload Area */}
-      <div
-        {...getRootProps()}
-        className={`fixed top-8 right-8 p-4 rounded-lg border-2 border-dashed transition-colors ${
-          isDragActive ? 'border-blue-500 bg-blue-500/10' : 'border-gray-600'
-        }`}
-      >
-        <input {...getInputProps()} />
-        <PhotoIcon className="w-8 h-8 text-gray-400" />
-      </div>
+            {/* Upload Area */}
+            <div
+              {...getRootProps()}
+              className={`fixed top-8 right-8 p-4 rounded-lg border-2 border-dashed transition-colors ${
+                isDragActive ? 'border-blue-500 bg-blue-500/10' : 'border-gray-600'
+              }`}
+            >
+              <input {...getInputProps()} />
+              <PhotoIcon className="w-8 h-8 text-gray-400" />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 } 

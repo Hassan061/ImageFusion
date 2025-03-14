@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { NAMES_LIST } from '@/config/names';
 
 interface NameTuple {
   firstName: string;
@@ -14,9 +13,11 @@ interface SlideshowState {
     imageWidth: number;
     imageHeight: number;
     imageFit: 'contain' | 'cover' | 'fill';
-    transitionSpeed: number;
+    imageTransitionSpeed: number;
+    textTransitionSpeed: number;
     transitionEffect: 'none' | 'fade' | 'slide' | 'zoom';
     namePosition: 'top' | 'center' | 'bottom';
+    isFullscreen: boolean;
   };
   addImage: (image: string) => void;
   removeImage: (index: number) => void;
@@ -27,17 +28,31 @@ interface SlideshowState {
   getRandomNamePermutation: () => string;
 }
 
-// Use imported names from config file
-const DEFAULT_NAMES: NameTuple[] = NAMES_LIST;
+// Default names
+const DEFAULT_NAMES: NameTuple[] = [
+  { firstName: "Emma", lastName: "Watson" },
+  { firstName: "Claire", lastName: "Boucher" },
+  { firstName: "Fadhel", lastName: "Shoubbar" },
+  { firstName: "Mohammed", lastName: "Al Herz" },
+  { firstName: "Kristen", lastName: "Stewart" },
+  { firstName: "Zara", lastName: "Tatiana" },
+  { firstName: "Shanice", lastName: "Hardie" },
+  { firstName: "Hebah", lastName: "Al Shawarib" },
+  { firstName: "Vanessa", lastName: "Hudgens" },
+  { firstName: "Yasmine", lastName: "Curren" },
+  { firstName: "Amy", lastName: "Sheridan" }
+];
 
 const MAX_IMAGES = 20; // Limit number of stored images
 const DEFAULT_SETTINGS = {
   imageWidth: 633,
   imageHeight: 866,
   imageFit: 'contain' as const,
-  transitionSpeed: 3000,
+  imageTransitionSpeed: 2000,
+  textTransitionSpeed: 2000,
   transitionEffect: 'fade' as const,
   namePosition: 'top' as const,
+  isFullscreen: false,
 };
 
 export const useStore = create<SlideshowState>()(
