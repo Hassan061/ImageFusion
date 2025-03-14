@@ -420,28 +420,43 @@ export default function Home() {
               {/* Upload Button */}
               <div
                 {...getRootProps()}
-                className={`bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all ${
+                className={`${
+                  theme === 'dark'
+                    ? 'bg-white/10 hover:bg-white/20 text-white'
+                    : 'bg-black/10 hover:bg-black/20 text-gray-800'
+                } backdrop-blur-sm p-3 rounded-full transition-all ${
                   isDragActive ? 'bg-blue-500/20 ring-2 ring-blue-500' : ''
                 }`}
                 title="Upload Images"
               >
                 <input {...getInputProps()} />
-                <PhotoIcon className="w-6 h-6 text-white" />
+                <PhotoIcon className="w-6 h-6" />
               </div>
               
               {/* Button to toggle slider panel */}
               <button
                 onClick={() => setShowSliders(prev => !prev)}
-                className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
+                className={`${
+                  theme === 'dark'
+                    ? 'bg-white/10 hover:bg-white/20 text-white'
+                    : 'bg-black/10 hover:bg-black/20 text-gray-800'
+                } backdrop-blur-sm p-3 rounded-full transition-all`}
                 title="Show Sliders"
               >
-                <span className="text-white text-sm">Sliders</span>
+                <span className="text-sm">Sliders</span>
               </button>
             </div>
 
             {/* Slider Controls Panel */}
             {showSliders && (
-              <div ref={sliderRef} className="fixed top-24 right-8 z-20 bg-white/10 p-4 rounded-lg backdrop-blur-sm text-white w-64 space-y-3">
+              <div 
+                ref={sliderRef} 
+                className={`fixed top-24 right-8 z-20 p-4 rounded-lg backdrop-blur-sm w-64 space-y-3 ${
+                  theme === 'dark'
+                    ? 'bg-white/10 text-white'
+                    : 'bg-black/10 text-gray-800'
+                }`}
+              >
                 <div>
                   <label className="block text-sm">
                     Image Transition Speed (ms): {settings.imageTransitionSpeed}
@@ -513,24 +528,32 @@ export default function Home() {
             <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4 z-20">
               <button
                 onClick={() => setIsPlaying(!isPlaying)}
-                className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
+                className={`${
+                  theme === 'dark'
+                    ? 'bg-white/10 hover:bg-white/20'
+                    : 'bg-black/10 hover:bg-black/20'
+                } backdrop-blur-sm p-3 rounded-full transition-all`}
               >
                 {isPlaying ? (
-                  <PauseIcon className="w-6 h-6 text-white" />
+                  <PauseIcon className={`w-6 h-6 ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`} />
                 ) : (
-                  <PlayIcon className="w-6 h-6 text-white" />
+                  <PlayIcon className={`w-6 h-6 ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`} />
                 )}
               </button>
               {/* Immersive icon toggles UI visibility */}
               <button
                 onClick={() => setUIHidden(prev => !prev)}
-                className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
+                className={`${
+                  theme === 'dark'
+                    ? 'bg-white/10 hover:bg-white/20'
+                    : 'bg-black/10 hover:bg-black/20'
+                } backdrop-blur-sm p-3 rounded-full transition-all`}
                 title="Toggle UI"
               >
                 {uiHidden ? (
-                  <ArrowsPointingInIcon className="w-6 h-6 text-white" />
+                  <ArrowsPointingInIcon className={`w-6 h-6 ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`} />
                 ) : (
-                  <ArrowsPointingOutIcon className="w-6 h-6 text-white" />
+                  <ArrowsPointingOutIcon className={`w-6 h-6 ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`} />
                 )}
               </button>
             </div>

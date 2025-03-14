@@ -9,7 +9,8 @@ export default function NameManager() {
   const [isOpen, setIsOpen] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const { names, addName, removeName } = useStore();
+  const { names, addName, removeName, settings } = useStore();
+  const { theme } = settings;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,10 +25,14 @@ export default function NameManager() {
     <>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-8 right-20 bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all z-20"
+        className={`fixed top-8 right-20 ${
+          theme === 'dark' 
+            ? 'bg-white/10 hover:bg-white/20 text-white' 
+            : 'bg-black/10 hover:bg-black/20 text-gray-800'
+        } backdrop-blur-sm p-3 rounded-full transition-all z-20`}
         title="Manage Names"
       >
-        <UserGroupIcon className="w-6 h-6 text-white" />
+        <UserGroupIcon className="w-6 h-6" />
       </button>
 
       <AnimatePresence>
@@ -36,15 +41,21 @@ export default function NameManager() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
-            className="fixed top-0 left-0 h-full w-80 bg-black/80 backdrop-blur-sm p-6 z-10 overflow-y-auto"
+            className={`fixed top-0 left-0 h-full w-80 ${
+              theme === 'dark'
+                ? 'bg-black/80 text-white'
+                : 'bg-white/90 text-gray-800'
+            } backdrop-blur-sm p-6 z-10 overflow-y-auto`}
           >
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-semibold text-white">Name Manager</h3>
+              <h3 className="text-xl font-semibold">Name Manager</h3>
               <button 
                 onClick={() => setIsOpen(false)}
-                className="p-1 rounded-full hover:bg-white/10"
+                className={`p-1 rounded-full ${
+                  theme === 'dark' ? 'hover:bg-white/10' : 'hover:bg-black/10'
+                }`}
               >
-                <XMarkIcon className="w-5 h-5 text-white/70" />
+                <XMarkIcon className={`w-5 h-5 ${theme === 'dark' ? 'text-white/70' : 'text-gray-500'}`} />
               </button>
             </div>
             
@@ -55,14 +66,22 @@ export default function NameManager() {
                   placeholder="First Name"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full ${
+                    theme === 'dark'
+                      ? 'bg-white/10 border-white/20 text-white'
+                      : 'bg-black/5 border-gray-200 text-gray-800'
+                  } border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500`}
                 />
                 <input
                   type="text"
                   placeholder="Last Name"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full ${
+                    theme === 'dark'
+                      ? 'bg-white/10 border-white/20 text-white'
+                      : 'bg-black/5 border-gray-200 text-gray-800'
+                  } border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500`}
                 />
                 <button
                   type="submit"
@@ -77,14 +96,16 @@ export default function NameManager() {
               {names.map((name, index) => (
                 <div
                   key={index}
-                  className="flex justify-between items-center bg-white/5 rounded-lg p-3"
+                  className={`flex justify-between items-center ${
+                    theme === 'dark' ? 'bg-white/5' : 'bg-black/5'
+                  } rounded-lg p-3`}
                 >
-                  <span className="text-white">
+                  <span>
                     {name.firstName} {name.lastName}
                   </span>
                   <button
                     onClick={() => removeName(index)}
-                    className="text-white/50 hover:text-white/80"
+                    className={theme === 'dark' ? 'text-white/50 hover:text-white/80' : 'text-gray-500 hover:text-gray-700'}
                   >
                     <TrashIcon className="w-5 h-5" />
                   </button>
@@ -96,4 +117,4 @@ export default function NameManager() {
       </AnimatePresence>
     </>
   );
-} 
+}
