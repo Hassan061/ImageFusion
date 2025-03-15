@@ -20,6 +20,7 @@ interface SlideshowState {
     isFullscreen: boolean;
     theme: 'light' | 'dark';
     textSize: number; // Text size in pixels
+    blankImageProbability: number; // Probability of showing a blank image (0-1)
   };
   addImage: (image: string) => void;
   removeImage: (index: number) => void;
@@ -27,7 +28,7 @@ interface SlideshowState {
   addName: (firstName: string, lastName: string) => void;
   removeName: (index: number) => void;
   updateSettings: (settings: Partial<SlideshowState['settings']>) => void;
-  getRandomImageIndex: () => number;
+  getRandomImageIndex: () => number | null;
   getRandomNamePermutation: () => string;
 }
 
@@ -58,6 +59,7 @@ const DEFAULT_SETTINGS = {
   isFullscreen: false,
   theme: 'dark' as const,
   textSize: 36, // Default text size in pixels
+  blankImageProbability: 0, // 0 probability of blank images by default
 };
 
 export const useStore = create<SlideshowState>()(
@@ -99,8 +101,21 @@ export const useStore = create<SlideshowState>()(
         })),
       getRandomImageIndex: () => {
         const state = get();
-        if (state.images.length === 0) return 0;
-        return Math.floor(Math.random() * state.images.length);
+        const { settings, images } = state;
+        
+        if (images.length === 0) return 0;
+        
+        // Check if we should show a blank image based on probability
+        if (settings.blankImageProbability > 0) {
+          const random = Math.random();
+          if (random < settings.blankImageProbability) {
+            // Return null to indicate we should show a blank image
+            return null;
+          }
+        }
+        
+        // Otherwise return a random image index as before
+        return Math.floor(Math.random() * images.length);
       },
       getRandomNamePermutation: () => {
         const state = get();
@@ -127,4 +142,4 @@ export const useStore = create<SlideshowState>()(
       }),
     }
   )
-); 
+);

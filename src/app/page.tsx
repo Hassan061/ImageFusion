@@ -60,6 +60,14 @@ export default function Home() {
     }
   }, [names, currentName]);
 
+  // Initialize with a random image
+  useEffect(() => {
+    if (images.length > 0) {
+      const randomIndex = getRandomImageIndex();
+      setCurrentIndex(randomIndex === null ? -1 : randomIndex);
+    }
+  }, [images]);
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: async (acceptedFiles) => {
       for (const file of acceptedFiles) {
@@ -107,7 +115,8 @@ export default function Home() {
     let imageInterval: ReturnType<typeof setInterval>;
     if (isPlaying && images.length > 0) {
       imageInterval = setInterval(() => {
-        setCurrentIndex(getRandomImageIndex());
+        const randomIndex = getRandomImageIndex();
+        setCurrentIndex(randomIndex === null ? -1 : randomIndex);
       }, settings.imageTransitionSpeed);
     }
     return () => clearInterval(imageInterval);
@@ -269,7 +278,7 @@ export default function Home() {
       <div className={`fixed inset-0 ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}>
         {/* Image Container */}
         <AnimatePresence mode={settings.transitionEffect === 'none' ? 'sync' : 'wait'}>
-          {images.length > 0 && (
+          {images.length > 0 && currentIndex >= 0 ? (
             <motion.div
               key={`image-${currentIndex}`}
               {...getTransitionVariants()}
@@ -289,6 +298,19 @@ export default function Home() {
                   margin: '0 auto'
                 }}
               />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="blank-slide"
+              {...getTransitionVariants()}
+              transition={{
+                duration: settings.transitionEffect === 'none' ? 0 : Math.max(0.1, settings.transitionDuration),
+                ease: "easeInOut"
+              }}
+              className="absolute inset-0"
+            >
+              {/* This div will be black in dark mode and white in light mode */}
+              <div className="w-full h-full" />
             </motion.div>
           )}
         </AnimatePresence>
@@ -537,6 +559,25 @@ export default function Home() {
                     }
                     className="w-full"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm">
+                    Blank Image Probability: {Math.round(settings.blankImageProbability * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={settings.blankImageProbability}
+                    onChange={(e) =>
+                      updateSettings({ blankImageProbability: parseFloat(e.target.value) })
+                    }
+                    className="w-full"
+                  />
+                  <p className="text-xs mt-1 opacity-70">
+                    Experimental: Controls frequency of blank frames
+                  </p>
                 </div>
               </div>
             )}
