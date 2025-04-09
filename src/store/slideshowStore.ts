@@ -17,10 +17,17 @@ interface SlideshowState {
     textTransitionSpeed: number;
     transitionEffect: 'none' | 'fade' | 'slide' | 'zoom';
     transitionDuration: number;  // Duration in seconds for transition effects
+    namePosition: 'top' | 'center' | 'bottom';
     isFullscreen: boolean;
-    theme: 'light' | 'dark';
+    theme: 'dark' | 'light';
     textSize: number; // Text size in pixels
     blankImageProbability: number; // Probability of showing a blank image (0-1)
+    speech: {
+      enabled: boolean;
+      rate: number;
+      pitch: number;
+      volume: number;
+    };
   };
   addImage: (image: string) => void;
   removeImage: (index: number) => void;
@@ -56,10 +63,17 @@ const DEFAULT_SETTINGS = {
   textTransitionSpeed: 2000,
   transitionEffect: 'none' as const,
   transitionDuration: 0.2,  // 200ms default for transition effects
+  namePosition: 'top' as const,
   isFullscreen: false,
   theme: 'dark' as const,
   textSize: 36, // Default text size in pixels
   blankImageProbability: 0, // 0 probability of blank images by default
+  speech: {
+    enabled: true,
+    rate: 1.0,
+    pitch: 1.0,
+    volume: 1.0
+  }
 };
 
 export const useStore = create<SlideshowState>()(

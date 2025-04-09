@@ -38,6 +38,7 @@ export default function SettingsPage() {
     { id: 'general', label: 'General' },
     { id: 'appearance', label: 'Appearance' },
     { id: 'transitions', label: 'Transitions' },
+    { id: 'speech', label: 'Speech' },
     { id: 'advanced', label: 'Advanced' },
   ];
 
@@ -258,6 +259,166 @@ export default function SettingsPage() {
                       </p>
                     </div>
                   )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Speech Tab */}
+          {activeTab === 'speech' && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="space-y-6"
+            >
+              <div>
+                <h2 className="text-xl font-semibold mb-4">Text-to-Speech Settings</h2>
+                
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <label className={`text-sm font-medium ${settings.theme === 'dark' ? 'text-white/70' : 'text-gray-600'}`}>
+                      Enable Speech
+                    </label>
+                    <div className="relative inline-block w-12 align-middle select-none">
+                      <input
+                        type="checkbox"
+                        name="enableSpeech"
+                        id="enableSpeech"
+                        className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
+                        checked={settings.speech.enabled}
+                        onChange={(e) => handleChange('speech', {
+                          ...settings.speech,
+                          enabled: e.target.checked
+                        })}
+                        style={{
+                          transition: 'transform 0.3s ease-in-out',
+                          transform: settings.speech.enabled ? 'translateX(100%)' : 'translateX(0)',
+                          borderColor: settings.speech.enabled ? '#3b82f6' : '#d1d5db'
+                        }}
+                      />
+                      <label
+                        htmlFor="enableSpeech"
+                        className="toggle-label block overflow-hidden h-6 rounded-full cursor-pointer"
+                        style={{
+                          background: settings.speech.enabled ? '#3b82f6' : (settings.theme === 'dark' ? '#374151' : '#e5e7eb')
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <p className={`text-xs ${settings.theme === 'dark' ? 'text-white/50' : 'text-gray-500'}`}>
+                    When enabled, names will be spoken aloud as they appear
+                  </p>
+                </div>
+                
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Voice Rate */}
+                  <div>
+                    <label className={`block text-sm font-medium ${settings.theme === 'dark' ? 'text-white/70' : 'text-gray-600'} mb-2`}>
+                      Speaking Rate
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="2"
+                        step="0.1"
+                        value={settings.speech.rate}
+                        onChange={(e) => handleChange('speech', {
+                          ...settings.speech,
+                          rate: parseFloat(e.target.value)
+                        })}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <span className={`${settings.theme === 'dark' ? 'text-white' : 'text-gray-800'} w-10 text-center`}>
+                        {settings.speech.rate.toFixed(1)}
+                      </span>
+                    </div>
+                    <p className={`text-xs ${settings.theme === 'dark' ? 'text-white/50' : 'text-gray-500'} mt-1`}>
+                      Adjusts how fast or slow the names are spoken
+                    </p>
+                  </div>
+                  
+                  {/* Voice Pitch */}
+                  <div>
+                    <label className={`block text-sm font-medium ${settings.theme === 'dark' ? 'text-white/70' : 'text-gray-600'} mb-2`}>
+                      Voice Pitch
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="2"
+                        step="0.1"
+                        value={settings.speech.pitch}
+                        onChange={(e) => handleChange('speech', {
+                          ...settings.speech,
+                          pitch: parseFloat(e.target.value)
+                        })}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <span className={`${settings.theme === 'dark' ? 'text-white' : 'text-gray-800'} w-10 text-center`}>
+                        {settings.speech.pitch.toFixed(1)}
+                      </span>
+                    </div>
+                    <p className={`text-xs ${settings.theme === 'dark' ? 'text-white/50' : 'text-gray-500'} mt-1`}>
+                      Adjusts how high or low the voice sounds
+                    </p>
+                  </div>
+                  
+                  {/* Voice Volume */}
+                  <div className="md:col-span-2">
+                    <label className={`block text-sm font-medium ${settings.theme === 'dark' ? 'text-white/70' : 'text-gray-600'} mb-2`}>
+                      Volume
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                        value={settings.speech.volume}
+                        onChange={(e) => handleChange('speech', {
+                          ...settings.speech,
+                          volume: parseFloat(e.target.value)
+                        })}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <span className={`${settings.theme === 'dark' ? 'text-white' : 'text-gray-800'} w-10 text-center`}>
+                        {(settings.speech.volume * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Test Button */}
+                <div className="mt-6">
+                  <button
+                    onClick={() => {
+                      if (typeof window !== 'undefined' && window.speechSynthesis) {
+                        // Cancel any ongoing speech
+                        window.speechSynthesis.cancel();
+                        
+                        // Create a test utterance
+                        const utterance = new SpeechSynthesisUtterance("This is a test of the speech settings");
+                        
+                        // Apply speech settings
+                        utterance.rate = settings.speech.rate;
+                        utterance.pitch = settings.speech.pitch;
+                        utterance.volume = settings.speech.volume;
+                        
+                        // Speak the test phrase
+                        window.speechSynthesis.speak(utterance);
+                      }
+                    }}
+                    className={`px-4 py-2 ${
+                      settings.theme === 'dark' 
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                        : 'bg-blue-500 hover:bg-blue-600 text-white'
+                    } rounded-lg transition-colors`}
+                    disabled={!settings.speech.enabled}
+                  >
+                    Test Speech
+                  </button>
                 </div>
               </div>
             </motion.div>

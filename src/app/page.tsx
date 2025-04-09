@@ -8,7 +8,9 @@ import {
   PauseIcon,
   PhotoIcon,
   ArrowsPointingOutIcon,
-  ArrowsPointingInIcon
+  ArrowsPointingInIcon,
+  SpeakerWaveIcon,
+  SpeakerXMarkIcon
 } from '@heroicons/react/24/solid';
 import { useStore } from '@/store/slideshowStore';
 import NameManager from '@/components/NameManager';
@@ -31,6 +33,7 @@ export default function Home() {
   const sliderRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef({ mouseX: 0, mouseY: 0, posX: 0, posY: 0 });
+  const speechSynthRef = useRef<SpeechSynthesis | null>(null);
 
   const {
     images,
@@ -67,6 +70,43 @@ export default function Home() {
       setCurrentIndex(randomIndex === null ? -1 : randomIndex);
     }
   }, [images]);
+
+  // Initialize speech synthesis
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      speechSynthRef.current = window.speechSynthesis;
+    }
+    return () => {
+      // Cancel any ongoing speech when component unmounts
+      if (speechSynthRef.current) {
+        speechSynthRef.current.cancel();
+      }
+    };
+  }, []);
+
+  // Speak the current name when it changes
+  useEffect(() => {
+    if (
+      currentName && 
+      speechSynthRef.current && 
+      settings.speech?.enabled &&
+      !settings.isFullscreen // Only speak when not in fullscreen mode
+    ) {
+      // Cancel any ongoing speech
+      speechSynthRef.current.cancel();
+      
+      // Create a new utterance
+      const utterance = new SpeechSynthesisUtterance(currentName);
+      
+      // Apply speech settings
+      utterance.rate = settings.speech?.rate ?? 1.0;
+      utterance.pitch = settings.speech?.pitch ?? 1.0;
+      utterance.volume = settings.speech?.volume ?? 1.0;
+      
+      // Speak the name
+      speechSynthRef.current.speak(utterance);
+    }
+  }, [currentName, settings.speech, settings.isFullscreen]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: async (acceptedFiles) => {
@@ -272,6 +312,17 @@ export default function Home() {
     }
   };
 
+  const toggleFullscreen = () => {
+    if (typeof document !== 'undefined') {
+      if (!settings.isFullscreen) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+      updateSettings({ isFullscreen: !settings.isFullscreen });
+    }
+  };
+
   return (
     <main className="min-h-screen relative">
       {/* Slideshow Container */}
@@ -320,27 +371,15 @@ export default function Home() {
           <div className="absolute inset-0 z-30 pointer-events-none">
             <div
               ref={textRef}
-              className={`absolute px-8 py-4 rounded-lg select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'} ${
-                theme === 'dark' 
-                  ? 'bg-black/50 backdrop-blur-sm' 
-                  : 'bg-white/60 backdrop-blur-sm'
-              }`}
+              className={`absolute px-8 py-4 rounded-lg select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'} ${theme === 'dark' ? 'bg-black/50 backdrop-blur-sm' : 'bg-white/60 backdrop-blur-sm'}`}
               style={{
                 pointerEvents: 'auto',
-                left: hasBeenDragged ? `calc(50% + ${textPosition.x}px)` : '50%',
-                top: hasBeenDragged 
-                  ? `calc(50% + ${textPosition.y}px)` 
-                  : '50%', // Default to center if never dragged
-                transform: isDragging 
-                  ? 'translate(-50%, -50%) scale(1.02)' 
-                  : 'translate(-50%, -50%)',
-                boxShadow: isDragging 
-                  ? '0 10px 25px rgba(0, 0, 0, 0.25)' 
-                  : '0 4px 8px rgba(0, 0, 0, 0.1)',
+                left: hasBeenDragged ? `calc(50% + ${textPosition.x}px)` : '75%',  // Default to top right
+                top: hasBeenDragged ? `calc(50% + ${textPosition.y}px)` : '25%', // Default to top right
+                transform: isDragging ? 'translate(-50%, -50%) scale(1.02)' : 'translate(-50%, -50%)',
+                boxShadow: isDragging ? '0 10px 25px rgba(0, 0, 0, 0.25)' : '0 4px 8px rgba(0, 0, 0, 0.1)',
                 transition: 'box-shadow 0.2s, transform 0.2s',
-                // Prevent text selection
                 userSelect: 'none',
-                // Prevent touch scrolling
                 touchAction: 'none'
               }}
               // Mouse down handler
@@ -351,6 +390,11 @@ export default function Home() {
                 // Mark as dragged if this is the first time
                 if (!hasBeenDragged) {
                   setHasBeenDragged(true);
+                  // Set initial position if dragging for the first time
+                  setTextPosition({
+                    x: textRef.current ? textRef.current.offsetWidth * 0.25 : 0,
+                    y: textRef.current ? -textRef.current.offsetHeight * 1.25 : 0
+                  });
                 }
                 
                 // Store starting positions
@@ -372,6 +416,11 @@ export default function Home() {
                 // Mark as dragged if this is the first time
                 if (!hasBeenDragged) {
                   setHasBeenDragged(true);
+                  // Set initial position if dragging for the first time
+                  setTextPosition({
+                    x: textRef.current ? textRef.current.offsetWidth * 0.25 : 0,
+                    y: textRef.current ? -textRef.current.offsetHeight * 1.25 : 0
+                  });
                 }
                 
                 // Only process first touch
@@ -443,42 +492,38 @@ export default function Home() {
               {/* Upload Button */}
               <div
                 {...getRootProps()}
-                className={`${
-                  theme === 'dark'
-                    ? 'bg-white/10 hover:bg-white/20 text-white'
-                    : 'bg-black/10 hover:bg-black/20 text-gray-800'
-                } backdrop-blur-sm p-3 rounded-full transition-all ${
-                  isDragActive ? 'bg-blue-500/20 ring-2 ring-blue-500' : ''
-                }`}
+                className={`${settings.theme === 'dark' ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-black/10 hover:bg-black/20 text-gray-800'} backdrop-blur-sm p-3 rounded-full transition-all cursor-pointer ${isDragActive ? 'bg-blue-500/20 ring-2 ring-blue-500' : ''}`}
                 title="Upload Images"
               >
                 <input {...getInputProps()} />
                 <PhotoIcon className="w-6 h-6" />
               </div>
-              
-              {/* Button to toggle slider panel */}
+
+              {/* Button to toggle slider panel */} 
               <button
                 onClick={() => setShowSliders(prev => !prev)}
-                className={`${
-                  theme === 'dark'
-                    ? 'bg-white/10 hover:bg-white/20 text-white'
-                    : 'bg-black/10 hover:bg-black/20 text-gray-800'
-                } backdrop-blur-sm p-3 rounded-full transition-all`}
+                className={`${settings.theme === 'dark' ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-black/10 hover:bg-black/20 text-gray-800'} backdrop-blur-sm p-3 rounded-full transition-all`}
                 title="Show Sliders"
               >
-                <span className="text-sm">Sliders</span>
+                 {/* Replace Sliders text with an icon if desired */} 
+                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                   <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
+                 </svg>
               </button>
             </div>
 
-            {/* Slider Controls Panel */}
+            {/* Speech Indicator */}
+            {currentName && settings.speech?.enabled && (
+              <div className="fixed top-8 left-8 bg-white/10 backdrop-blur-sm p-3 rounded-full z-20">
+                <SpeakerWaveIcon className="w-6 h-6 text-white" />
+              </div>
+            )}
+
+            {/* Slider Controls Panel - Adjusted top position */}
             {showSliders && (
               <div 
                 ref={sliderRef} 
-                className={`fixed top-24 right-8 z-20 p-4 rounded-lg backdrop-blur-sm w-64 space-y-3 ${
-                  theme === 'dark'
-                    ? 'bg-white/10 text-white'
-                    : 'bg-black/10 text-gray-800'
-                }`}
+                className={`fixed top-36 right-8 z-20 p-4 rounded-lg backdrop-blur-sm w-64 space-y-3 ${settings.theme === 'dark' ? 'bg-white/10 text-white' : 'bg-black/10 text-gray-800'}`}
               >
                 <div>
                   <label className="block text-sm">
@@ -582,36 +627,42 @@ export default function Home() {
               </div>
             )}
 
-            {/* Bottom Controls */}
-            <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4 z-20">
+            {/* Controls */}
+            <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4">
               <button
                 onClick={() => setIsPlaying(!isPlaying)}
-                className={`${
-                  theme === 'dark'
-                    ? 'bg-white/10 hover:bg-white/20'
-                    : 'bg-black/10 hover:bg-black/20'
-                } backdrop-blur-sm p-3 rounded-full transition-all`}
+                className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
               >
                 {isPlaying ? (
-                  <PauseIcon className={`w-6 h-6 ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`} />
+                  <PauseIcon className="w-6 h-6 text-white" />
                 ) : (
-                  <PlayIcon className={`w-6 h-6 ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`} />
+                  <PlayIcon className="w-6 h-6 text-white" />
                 )}
               </button>
-              {/* Immersive icon toggles UI visibility */}
               <button
-                onClick={() => setUIHidden(prev => !prev)}
-                className={`${
-                  theme === 'dark'
-                    ? 'bg-white/10 hover:bg-white/20'
-                    : 'bg-black/10 hover:bg-black/20'
-                } backdrop-blur-sm p-3 rounded-full transition-all`}
-                title="Toggle UI"
+                onClick={toggleFullscreen}
+                className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
               >
-                {uiHidden ? (
-                  <ArrowsPointingInIcon className={`w-6 h-6 ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`} />
+                {settings.isFullscreen ? (
+                  <ArrowsPointingInIcon className="w-6 h-6 text-white" />
                 ) : (
-                  <ArrowsPointingOutIcon className={`w-6 h-6 ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`} />
+                  <ArrowsPointingOutIcon className="w-6 h-6 text-white" />
+                )}
+              </button>
+              <button
+                onClick={() => updateSettings({
+                  speech: {
+                    ...(settings.speech || { rate: 1.0, pitch: 1.0, volume: 1.0 }),
+                    enabled: !settings.speech?.enabled
+                  }
+                })}
+                className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all"
+                title={settings.speech?.enabled ? "Mute Speech" : "Enable Speech"}
+              >
+                {settings.speech?.enabled ? (
+                  <SpeakerWaveIcon className="w-6 h-6 text-white" />
+                ) : (
+                  <SpeakerXMarkIcon className="w-6 h-6 text-white" />
                 )}
               </button>
             </div>
