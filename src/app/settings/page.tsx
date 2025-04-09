@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeftIcon, TrashIcon, Cog6ToothIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, TrashIcon, Cog6ToothIcon, InformationCircleIcon, PlayCircleIcon, ArrowPathIcon, XCircleIcon, CheckCircleIcon, ArrowDownTrayIcon, StopCircleIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { useStore, SlideshowState } from '@/store/slideshowStore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useOpenAITTS } from '@/hooks/useOpenAITTS';
 import { useElevenLabsTTS } from '@/hooks/useElevenLabsTTS';
+import JSZip from 'jszip';
+import { saveAudioBlob, getAudioBlob as getCachedAudioBlob, clearAudioCache, getCacheItemCount } from '@/lib/audioCacheDb'; // Import DB functions
 
 // DEV ONLY: Pre-fill API Key for testing (Update for OpenAI if desired)
 // const DEV_OPENAI_API_KEY = 'YOUR_DEV_OPENAI_KEY'; // Replace if needed
@@ -38,23 +40,47 @@ const defaultElevenLabsSettings = {
   model_id: 'eleven_monolingual_v1',
 };
 
+// Type for the permutation list items
+type PermutationItem = {
+  text: string;
+  status: 'pending' | 'generating' | 'generated' | 'error';
+  audioBlob?: Blob;
+  errorMessage?: string;
+};
+
+// Delay between API calls in ms (to avoid rate limiting)
+const GENERATION_DELAY_MS = 500; 
+
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('speech'); // Default to speech tab
   // Locally manage OpenAI API key state
   const [openaiApiKey, setOpenaiApiKey] = useState('');
   const [elevenLabsApiKey, setElevenLabsApiKey] = useState(''); // State for ElevenLabs key
-  const { settings, updateSettings, images, clearImages } = useStore();
+  const { settings, updateSettings, images, clearImages, names } = useStore();
   const router = useRouter();
+  // Audio playback ref for generated audio
+  const generatedAudioRef = useRef<HTMLAudioElement | null>(null);
+  const cancelGenerationRef = useRef<boolean>(false); // Ref to signal cancellation
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [isZipping, setIsZipping] = useState(false);
+  const [isUploading, setIsUploading] = useState(false); // State for upload process
+  const [uploadStatusMessage, setUploadStatusMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null); // Ref for hidden file input
+  const [cachedItemCount, setCachedItemCount] = useState<number | null>(null);
 
-  // Instantiate TTS Hooks with defaults to satisfy types
-  const { speak: testOpenAISpeech } = useOpenAITTS(
+  // Instantiate TTS Hooks - Destructure both speak and getAudioBlob
+  const { speak: testOpenAISpeech, getAudioBlob: getOpenAIAudioBlob } = useOpenAITTS(
     openaiApiKey, 
     settings.openaiSettings ?? defaultOpenAISettings // Provide default if undefined
   );
-  const { speak: testElevenLabsSpeech } = useElevenLabsTTS(
+  const { speak: testElevenLabsSpeech, getAudioBlob: getElevenLabsAudioBlob } = useElevenLabsTTS(
     elevenLabsApiKey, 
     settings.elevenLabsSettings ?? defaultElevenLabsSettings // Provide default if undefined
   ); 
+
+  // State for permutation generation
+  const [permutationList, setPermutationList] = useState<PermutationItem[]>([]);
 
   // Load API key from sessionStorage on mount, pre-fill if DEV key provided
   useEffect(() => {
@@ -145,6 +171,262 @@ export default function SettingsPage() {
   // OpenAI Options
   const openaiModels = ['tts-1', 'tts-1-hd'];
   const openaiVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+
+  // Function to generate all permutations and fetch audio
+  const handleGeneratePermutations = useCallback(async () => {
+    setIsGenerating(true);
+    setGenerationProgress(0);
+    cancelGenerationRef.current = false; // Reset cancellation flag
+    setPermutationList([]); // Clear previous list on new generation
+    setUploadStatusMessage(null);
+
+    // 1. Get names and generate text permutations
+    const firstNames = names.map(n => n.firstName);
+    const lastNames = names.map(n => n.lastName);
+    const allTextPermutations = firstNames.flatMap(fn => lastNames.map(ln => `${fn} ${ln}`));
+    const uniqueTextPermutations = Array.from(new Set(allTextPermutations)); // Ensure uniqueness
+
+    const initialList: PermutationItem[] = uniqueTextPermutations.map(text => ({
+      text,
+      status: 'pending',
+    }));
+    setPermutationList(initialList);
+
+    // 2. Select the correct API function
+    let getAudioBlobFunc: ((text: string) => Promise<Blob>) | null = null;
+    let providerName: string = ''
+    if (settings.ttsProvider === 'openai' && openaiApiKey) {
+      getAudioBlobFunc = getOpenAIAudioBlob;
+      providerName = 'OpenAI';
+    } else if (settings.ttsProvider === 'elevenlabs' && elevenLabsApiKey && settings.elevenLabsSettings?.voiceId) {
+      getAudioBlobFunc = getElevenLabsAudioBlob;
+      providerName = 'ElevenLabs';
+    }
+
+    if (!getAudioBlobFunc) {
+      console.error('Cannot generate permutations: TTS provider not selected or configured correctly.');
+      // TODO: Show feedback to user
+      setPermutationList(initialList.map(item => ({ ...item, status: 'error', errorMessage: 'Provider not configured' })));
+      setIsGenerating(false);
+      return;
+    }
+    
+    console.log(`[Audio Generation] Starting generation for ${uniqueTextPermutations.length} permutations using ${providerName}...`);
+    let generatedCount = 0;
+
+    for (let i = 0; i < uniqueTextPermutations.length; i++) {
+      if (cancelGenerationRef.current) break;
+
+      const text = uniqueTextPermutations[i];
+      
+      // Update status to 'generating'
+      setPermutationList(prev => prev.map(item => item.text === text ? { ...item, status: 'generating' } : item));
+      
+      try {
+        console.log(`[Audio Generation] Requesting: "${text}" (${i + 1}/${uniqueTextPermutations.length})`);
+        const blob = await getAudioBlobFunc(text);
+        await saveAudioBlob(text, blob); // *** SAVE TO INDEXED DB ***
+        // Update status to 'generated' and store blob
+        setPermutationList(prev => prev.map(item => item.text === text ? { ...item, status: 'generated', audioBlob: blob } : item));
+        generatedCount++;
+        console.log(`[Audio Generation] Success: "${text}"`);
+      } catch (error: any) {
+        console.error(`[Audio Generation] Error for "${text}":`, error);
+        // Update status to 'error'
+        setPermutationList(prev => prev.map(item => item.text === text ? { ...item, status: 'error', errorMessage: error.message || 'Unknown error' } : item));
+      }
+      
+      setGenerationProgress(i + 1);
+
+      // Add delay, but check for cancellation immediately after delay resolves
+      if (i < uniqueTextPermutations.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, GENERATION_DELAY_MS));
+        if (cancelGenerationRef.current) {
+          console.log('[Audio Generation] Generation cancelled by user during delay.');
+          break; // Exit loop if cancelled during delay
+        }
+      }
+    }
+
+    console.log('[Audio Generation] Finished or Cancelled.');
+    setIsGenerating(false); // Ensure state is reset regardless of how loop ended
+    getCacheItemCount().then(setCachedItemCount); // Update cache count after generation
+  }, [names, settings.ttsProvider, openaiApiKey, elevenLabsApiKey, settings.elevenLabsSettings, getOpenAIAudioBlob, getElevenLabsAudioBlob]);
+
+  // Function to signal cancellation
+  const handleStopGeneration = () => {
+    console.log('[Audio Generation] Stop button clicked.');
+    cancelGenerationRef.current = true;
+  };
+
+  // Function to play a generated audio blob
+  const handlePlayGeneratedAudio = useCallback((blob: Blob) => {
+    if (generatedAudioRef.current) {
+        generatedAudioRef.current.pause();
+        generatedAudioRef.current.removeAttribute('src'); 
+        generatedAudioRef.current = null;
+    }
+    
+    const audioUrl = URL.createObjectURL(blob);
+    const audio = new Audio(audioUrl);
+    generatedAudioRef.current = audio;
+
+    audio.play().catch(err => console.error('Error playing generated audio:', err));
+
+    audio.onended = () => {
+      console.log('Generated audio finished playing.');
+      URL.revokeObjectURL(audioUrl);
+      generatedAudioRef.current = null;
+    };
+    audio.onerror = (e) => {
+      console.error('Generated audio element error:', e);
+      URL.revokeObjectURL(audioUrl);
+      generatedAudioRef.current = null;
+    };
+  }, []);
+
+  // Cleanup audio on unmount
+   useEffect(() => {
+    return () => {
+      if (generatedAudioRef.current) {
+        generatedAudioRef.current.pause();
+        if (generatedAudioRef.current.src) {
+             URL.revokeObjectURL(generatedAudioRef.current.src);
+        }
+        generatedAudioRef.current = null;
+      }
+    };
+  }, []);
+
+  // Function to download generated blobs as a zip
+  const handleDownloadCache = useCallback(async () => {
+    const generatedItems = permutationList.filter(item => item.status === 'generated' && item.audioBlob);
+    if (generatedItems.length === 0) {
+      console.warn('No generated audio to download.');
+      // TODO: User feedback
+      return;
+    }
+
+    setIsZipping(true);
+    console.log(`[ZIP Download] Zipping ${generatedItems.length} audio files...`);
+    
+    try {
+      const zip = new JSZip();
+      generatedItems.forEach(item => {
+        // Sanitize filename slightly (replace spaces, though modern systems handle them)
+        const filename = `${item.text.replace(/\s+/g, '_')}.mp3`; 
+        zip.file(filename, item.audioBlob!); // Add blob to zip
+      });
+
+      // Generate zip file content
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+
+      // Trigger download using anchor tag method
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(zipBlob);
+      link.download = "audio_cache.zip"; // Filename for the download
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href); // Clean up object URL
+      
+      console.log('[ZIP Download] Download initiated.');
+    } catch (error) {
+      console.error('[ZIP Download] Failed to create or download zip:', error);
+      // TODO: User feedback
+    } finally {
+      setIsZipping(false);
+    }
+  }, [permutationList]);
+
+  // Function to trigger file input click
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  // Function to handle file selection and processing
+  const handleFileSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Reset file input value to allow re-uploading the same file
+    event.target.value = ''; 
+
+    if (!file.name.endsWith('.zip') && file.type !== 'application/zip') {
+      setUploadStatusMessage('Error: Please select a valid .zip file.');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadStatusMessage('Processing zip file... (Existing cache will be overwritten)');
+    setPermutationList([]); // Clear UI list
+    console.log('[ZIP Upload] Processing uploaded file:', file.name);
+
+    try {
+      // Optional: Clear existing DB cache before uploading? 
+      // await clearAudioCache(); 
+      // console.log('[ZIP Upload] Cleared existing DB cache.');
+
+      const zip = await JSZip.loadAsync(file);
+      let processedCount = 0;
+      let errorCount = 0;
+      const uiUpdateList: PermutationItem[] = []; // List for immediate UI update
+
+      const filePromises = Object.keys(zip.files).map(async (filename) => {
+        const zipEntry = zip.files[filename];
+        if (!zipEntry.dir && filename.toLowerCase().endsWith('.mp3')) {
+          const text = filename.slice(0, -4).replace(/_/g, ' ');
+          try {
+            const blob = await zipEntry.async('blob');
+            await saveAudioBlob(text, blob); // *** SAVE TO INDEXED DB ***
+            uiUpdateList.push({
+              text: text,
+              status: 'generated', // Mark as generated since it came from cache
+              audioBlob: blob,
+            });
+            processedCount++;
+            console.log(`[ZIP Upload] Saved to DB: ${filename} -> "${text}"`);
+          } catch (fileError) {
+            console.error(`[ZIP Upload] Error processing/saving file ${filename}:`, fileError);
+             uiUpdateList.push({
+              text: text,
+              status: 'error',
+              errorMessage: `Failed to read/save audio.`,
+            });
+            errorCount++;
+          }
+        }
+      });
+
+      await Promise.all(filePromises);
+      
+      setPermutationList(uiUpdateList.sort((a, b) => a.text.localeCompare(b.text))); // Update UI list
+      setUploadStatusMessage(`Processed ${processedCount + errorCount} file(s). Saved ${processedCount} to cache. Errors: ${errorCount}.`);
+      console.log(`[ZIP Upload] Finished processing. Saved: ${processedCount}, Errors: ${errorCount}.`);
+      getCacheItemCount().then(setCachedItemCount); // Update cache count
+
+    } catch (error) {
+      console.error('[ZIP Upload] Error loading or processing zip file:', error);
+      setUploadStatusMessage('Error: Could not read the zip file.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, []); // Add dependencies if needed
+
+  // Function to clear the persistent cache
+  const handleClearCache = useCallback(async () => {
+    if (window.confirm('Are you sure you want to clear the entire persistent audio cache? This cannot be undone.')) {
+      try {
+        await clearAudioCache();
+        setPermutationList([]); // Clear the UI list as well
+        setCachedItemCount(0); // Update count display
+        setUploadStatusMessage('Audio cache cleared successfully.');
+      } catch (error) {
+        console.error('Failed to clear audio cache:', error);
+        setUploadStatusMessage('Error clearing audio cache.');
+      }
+    }
+  }, []);
 
   return (
     <div className={`min-h-screen ${settings.theme === 'dark' ? 'bg-black text-white' : 'bg-white text-gray-800'} p-6 pb-24`}>
@@ -707,6 +989,166 @@ export default function SettingsPage() {
                   </button>
                 </div>
               )}
+
+              {/* Pre-Generated Audio Cache Section */} 
+              {settings.ttsProvider !== 'browser' && ( // Only show if not using browser TTS
+                <div className="p-4 border border-white/10 rounded-lg space-y-6">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h2 className="text-xl font-semibold mb-2">Persistent Audio Cache (IndexedDB)</h2>
+                      <p className={`text-sm ${settings.theme === 'dark' ? 'text-white/60' : 'text-gray-500'} mb-4 max-w-prose`}>
+                        Generate or upload audio files for name permutations. These are stored locally in your browser using IndexedDB for instant playback during the slideshow.
+                      </p>
+                    </div>
+                     {/* Cache Info/Clear Button */} 
+                     <div className="text-right flex-shrink-0 ml-4">
+                       <p className={`text-sm mb-1 ${settings.theme === 'dark' ? 'text-white/60' : 'text-gray-500'}`}>
+                         Items in Cache: {cachedItemCount ?? 'Loading...'}
+                       </p>
+                       <button
+                         onClick={handleClearCache}
+                         disabled={isGenerating || isUploading || cachedItemCount === 0}
+                         className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${ 
+                           isGenerating || isUploading || cachedItemCount === 0
+                             ? 'bg-gray-600/50 text-white/40 cursor-not-allowed'
+                             : (settings.theme === 'dark' ? 'bg-red-800 hover:bg-red-700 text-red-100' : 'bg-red-100 hover:bg-red-200 text-red-700')
+                         }`}
+                         title={isGenerating || isUploading ? 'Cannot clear while busy' : cachedItemCount === 0 ? 'Cache is empty' : 'Clear all cached audio'}
+                       >
+                         <TrashIcon className="w-3 h-3" />
+                         Clear Cache
+                       </button>
+                     </div>
+                   </div>
+                  
+                  <div className="flex flex-wrap gap-4 items-center border-t border-white/10 pt-4">
+                    {/* Generate/Stop Button */} 
+                    {!isGenerating ? (
+                      <button
+                        onClick={handleGeneratePermutations}
+                        disabled={isGenerating || (settings.ttsProvider === 'openai' && !openaiApiKey) || (settings.ttsProvider === 'elevenlabs' && (!elevenLabsApiKey || !settings.elevenLabsSettings?.voiceId))}
+                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${ 
+                           ((settings.ttsProvider === 'openai' && openaiApiKey) || (settings.ttsProvider === 'elevenlabs' && elevenLabsApiKey && settings.elevenLabsSettings?.voiceId))
+                             ? (settings.theme === 'dark' ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-green-500 hover:bg-green-600 text-white')
+                             : 'bg-gray-600 text-white/50 cursor-not-allowed'
+                        }`}
+                        title={isGenerating ? 'Generation in progress...' : ((settings.ttsProvider === 'openai' && !openaiApiKey) || (settings.ttsProvider === 'elevenlabs' && (!elevenLabsApiKey || !settings.elevenLabsSettings?.voiceId))) ? 'Configure API Key/Voice first' : 'Generate Audio Cache'}
+                      >
+                        Generate Audio Cache
+                      </button>
+                    ) : (
+                      // Show progress and Stop button when generating
+                      <div className="flex items-center gap-4">
+                         <span className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-600 text-white/70">
+                           <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                           Generating... ({generationProgress} / {permutationList.length})
+                         </span>
+                         <button
+                           onClick={handleStopGeneration}
+                           className={`inline-flex items-center gap-1 px-3 py-2 rounded-lg transition-colors ${settings.theme === 'dark' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-red-500 hover:bg-red-600 text-white'}`}
+                           title="Stop Generation"
+                         >
+                           <StopCircleIcon className="w-5 h-5" />
+                           Stop
+                         </button>
+                      </div>
+                    )}
+
+                    {/* Download Button (Downloads from UI state, might not reflect DB fully) */} 
+                    {!isGenerating && (
+                      <button
+                        onClick={handleDownloadCache}
+                        disabled={isZipping || permutationList.filter(p => p.status === 'generated').length === 0}
+                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${ 
+                          isZipping || permutationList.filter(p => p.status === 'generated').length === 0
+                            ? 'bg-gray-600 text-white/50 cursor-not-allowed'
+                            : (settings.theme === 'dark' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white')
+                        }`}
+                        title={isZipping ? 'Zipping in progress...' : permutationList.filter(p => p.status === 'generated').length === 0 ? 'Generate audio first' : 'Download generated audio (.zip)'}
+                      >
+                        {isZipping ? (
+                          <>
+                            <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                            Zipping...
+                          </>
+                        ) : (
+                          <>
+                            <ArrowDownTrayIcon className="w-5 h-5" />
+                            Download Cache
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {/* Upload Button */} 
+                    {!isGenerating && (
+                       <button
+                         onClick={handleUploadClick}
+                         disabled={isUploading}
+                         className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${ 
+                           isUploading 
+                             ? 'bg-gray-600 text-white/50 cursor-wait'
+                             : (settings.theme === 'dark' ? 'bg-yellow-600 hover:bg-yellow-700 text-white' : 'bg-yellow-500 hover:bg-yellow-600 text-white')
+                         }`}
+                         title={isUploading ? 'Processing upload...' : 'Upload Audio Cache (.zip)'}
+                       >
+                         {isUploading ? (
+                           <>
+                             <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                             Processing...
+                           </>
+                         ) : (
+                           <>
+                             <ArrowUpTrayIcon className="w-5 h-5" />
+                             Upload Cache
+                           </>
+                         )}
+                       </button>
+                    )}
+                  </div>
+
+                  {/* Hidden File Input */} 
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    onChange={handleFileSelected}
+                    accept=".zip,application/zip"
+                    style={{ display: 'none' }} 
+                  />
+
+                  {/* Upload Status Message */} 
+                  {uploadStatusMessage && (
+                    <p className={`text-sm ${uploadStatusMessage.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
+                      {uploadStatusMessage}
+                    </p>
+                  )}
+
+                  {/* Display Permutation List (Shows status for current session generation/upload) */} 
+                  {permutationList.length > 0 && (
+                     <div className="mt-6 max-h-96 overflow-y-auto border border-white/10 rounded-lg p-4 space-y-2 bg-white/5">
+                       <h3 className="text-lg font-medium mb-3">Session Generation/Upload Status ({permutationList.filter(p => p.status === 'generated').length} / {permutationList.length})</h3>
+                        {permutationList.map((item, index) => (
+                          <div key={`${item.text}-${index}`} className={`flex items-center justify-between p-2 rounded ${settings.theme === 'dark' ? 'hover:bg-white/10' : 'hover:bg-gray-100'}`}>
+                            <div className="flex items-center gap-2">
+                              {getStatusIcon(item.status)}
+                              <span className={`text-sm ${item.status === 'error' ? 'text-red-400' : (settings.theme === 'dark' ? 'text-white/80' : 'text-gray-700')}`}>{item.text}</span>
+                              {item.status === 'error' && <span className="text-xs text-red-500">({item.errorMessage})</span>}
+                            </div>
+                            {item.status === 'generated' && item.audioBlob && (
+                              <button 
+                                onClick={() => handlePlayGeneratedAudio(item.audioBlob!)}
+                                className={`p-1 rounded-full transition-colors ${settings.theme === 'dark' ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-gray-500 hover:text-gray-800 hover:bg-black/10'}`}
+                                title={`Play audio for ${item.text}`}
+                              >
+                                <PlayCircleIcon className="w-5 h-5" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                     </div>
+                  )}
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -756,4 +1198,15 @@ export default function SettingsPage() {
       </div>
     </div>
   );
-} 
+}
+
+// Helper to get status icon
+const getStatusIcon = (status: PermutationItem['status']) => {
+  switch (status) {
+    case 'pending': return null; // Or a clock icon?
+    case 'generating': return <ArrowPathIcon className="w-4 h-4 text-blue-400 animate-spin" />;
+    case 'generated': return <CheckCircleIcon className="w-4 h-4 text-green-400" />;
+    case 'error': return <XCircleIcon className="w-4 h-4 text-red-400" />;
+    default: return null;
+  }
+}; 

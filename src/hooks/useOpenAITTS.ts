@@ -11,74 +11,78 @@ type OpenAITTSettings = {
 const OPENAI_TTS_URL = 'https://api.openai.com/v1/audio/speech';
 
 export const useOpenAITTS = (apiKey: string, settings: OpenAITTSettings | undefined) => {
-  const audioRef = useRef<HTMLAudioElement | null>(null); // Ref to manage the audio element
+  const audioRef = useRef<HTMLAudioElement | null>(null); // Ref for playing audio directly via speak()
 
-  const speak = useCallback(async (text: string) => {
-    console.log('[OpenAI TTS Hook] speak() called.');
+  // New function to fetch audio data as Blob
+  const getAudioBlob = useCallback(async (text: string): Promise<Blob> => {
+    console.log('[OpenAI TTS Hook] getAudioBlob() called.');
     console.log('[OpenAI TTS Hook] Received API Key:', apiKey ? `'${apiKey.substring(0, 7)}...'` : 'Missing');
     console.log('[OpenAI TTS Hook] Received Settings:', settings);
 
     if (!apiKey) {
-      console.warn('[OpenAI TTS Hook] Cannot speak: API Key is missing.');
-      // TODO: Provide user feedback (e.g., toast notification)
-      return;
+      console.warn('[OpenAI TTS Hook] Cannot get audio blob: API Key is missing.');
+      throw new Error('API Key is missing');
     }
-
     if (!settings) {
-      console.warn('[OpenAI TTS Hook] Cannot speak: OpenAI settings are missing.');
-      return;
+      console.warn('[OpenAI TTS Hook] Cannot get audio blob: OpenAI settings are missing.');
+      throw new Error('OpenAI settings are missing');
     }
 
+    // Ensure defaults are used if settings properties are missing
+    const requestBody = {
+      model: settings.model ?? 'tts-1', 
+      input: text,
+      voice: settings.voice ?? 'alloy', 
+      response_format: 'mp3', 
+      speed: settings.speed ?? 1.0,
+    };
+    
+    console.log('[OpenAI TTS Hook] Sending request body for blob:', requestBody);
+
+    const response = await fetch(OPENAI_TTS_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody), 
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({ message: 'Failed to parse error response.'}));
+      console.error('[OpenAI TTS Hook] API Error fetching blob:', response.status, response.statusText, errorBody);
+      throw new Error(`OpenAI API Error: ${response.statusText} - ${errorBody?.error?.message || 'Unknown error'}`);
+    }
+
+    console.log('[OpenAI TTS Hook] Received audio blob response.');
+    const audioBlob = await response.blob();
+    return audioBlob;
+
+  }, [apiKey, settings]);
+
+  // Existing speak function - now potentially uses getAudioBlob
+  const speak = useCallback(async (text: string) => {
+    console.log('[OpenAI TTS Hook] speak() called.');
     // Stop any currently playing audio from this hook
     if (audioRef.current) {
         audioRef.current.pause();
-        audioRef.current.removeAttribute('src'); // Remove src to prevent potential replay
+        audioRef.current.removeAttribute('src'); 
         audioRef.current = null;
     }
 
-    console.log(`[OpenAI TTS Hook] Requesting TTS for: "${text}"`);
     try {
-      // Ensure defaults are used if settings properties are missing
-      const requestBody = {
-        model: settings.model ?? 'tts-1', // Default to tts-1
-        input: text,
-        voice: settings.voice ?? 'alloy', // Default to alloy
-        response_format: 'mp3', 
-        speed: settings.speed ?? 1.0,   // Default to 1.0
-      };
-      
-      console.log('[OpenAI TTS Hook] Sending request body:', requestBody);
-
-      const response = await fetch(OPENAI_TTS_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody), // Use the prepared body with defaults
-      });
-
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({ message: 'Failed to parse error response.'}));
-        console.error('[OpenAI TTS Hook] API Error:', response.status, response.statusText, errorBody);
-        // TODO: Provide user feedback about the error
-        throw new Error(`OpenAI API Error: ${response.statusText} - ${errorBody?.error?.message || 'Unknown error'}`);
-      }
-
-      console.log('[OpenAI TTS Hook] Received audio response.');
-      const audioBlob = await response.blob();
+      const audioBlob = await getAudioBlob(text); // Reuse getAudioBlob logic
       const audioUrl = URL.createObjectURL(audioBlob);
       
       // Create and play audio
       const audio = new Audio(audioUrl);
-      audioRef.current = audio; // Store ref to the current audio
+      audioRef.current = audio; 
 
       audio.play().catch(err => {
           console.error('[OpenAI TTS Hook] Error playing audio:', err);
-          // Often due to browser autoplay restrictions - may need user interaction first.
       });
 
-      // Clean up the object URL when audio finishes or on error/component unmount
+      // Clean up
       audio.onended = () => {
         console.log('[OpenAI TTS Hook] Audio finished playing.');
         URL.revokeObjectURL(audioUrl);
@@ -91,24 +95,24 @@ export const useOpenAITTS = (apiKey: string, settings: OpenAITTSettings | undefi
       };
 
     } catch (error) {
-      console.error('[OpenAI TTS Hook] Failed to fetch or play TTS audio:', error);
+      console.error('[OpenAI TTS Hook] Failed to fetch or play TTS audio via speak():', error);
       // TODO: Provide user feedback
     }
-  }, [apiKey, settings]);
+  }, [getAudioBlob]); // Depends on getAudioBlob now
 
-  // Cleanup function to stop audio if component unmounts while playing
+  // Cleanup function (remains the same)
   useEffect(() => {
     return () => {
       if (audioRef.current) {
         console.log('[OpenAI TTS Hook] Cleaning up audio on unmount.');
         audioRef.current.pause();
         if (audioRef.current.src) {
-             URL.revokeObjectURL(audioRef.current.src); // Ensure object URL is revoked
+             URL.revokeObjectURL(audioRef.current.src);
         }
         audioRef.current = null;
       }
     };
   }, []);
 
-  return { speak };
+  return { speak, getAudioBlob }; // Return both functions
 }; 

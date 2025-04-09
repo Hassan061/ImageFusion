@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
 import {
@@ -17,6 +17,8 @@ import NameManager from '@/components/NameManager';
 import Settings from '@/components/Settings';
 import Onboarding from '@/components/Onboarding';
 import { useOpenAITTS } from '@/hooks/useOpenAITTS';
+import { useElevenLabsTTS } from '@/hooks/useElevenLabsTTS';
+import { getAudioBlob as getCachedAudioBlob } from '@/lib/audioCacheDb';
 
 export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -35,8 +37,10 @@ export default function Home() {
   const textRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef({ mouseX: 0, mouseY: 0, posX: 0, posY: 0 });
   const speechSynthRef = useRef<SpeechSynthesis | null>(null);
+  const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
   // State to hold the API key read from sessionStorage
   const [openaiApiKey, setOpenaiApiKey] = useState<string>('');
+  const [elevenLabsApiKey, setElevenLabsApiKey] = useState<string>('');
 
   const {
     images,
@@ -55,17 +59,15 @@ export default function Home() {
 
   // Read OpenAI API key from sessionStorage when component mounts or ttsProvider changes
   useEffect(() => {
-    if (settings.ttsProvider === 'openai') {
-      const storedKey = sessionStorage.getItem('openaiApiKey');
-      setOpenaiApiKey(storedKey || '');
-    } else {
-      // Clear the key state if OpenAI is not selected
-      setOpenaiApiKey('');
-    }
+    const storedOpenAIKey = sessionStorage.getItem('openaiApiKey');
+    setOpenaiApiKey(storedOpenAIKey || '');
+    const storedElevenLabsKey = sessionStorage.getItem('elevenLabsApiKey');
+    setElevenLabsApiKey(storedElevenLabsKey || '');
   }, [settings.ttsProvider]);
 
   // Instantiate the correct hook based on provider
   const { speak: speakWithOpenAI } = useOpenAITTS(openaiApiKey, settings.openaiSettings);
+  const { speak: speakWithElevenLabs } = useElevenLabsTTS(elevenLabsApiKey, settings.elevenLabsSettings);
 
   // Update the current name
   const updateCurrentName = () => {
@@ -90,7 +92,7 @@ export default function Home() {
 
   // Initialize browser speech synthesis
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && settings.ttsProvider === 'browser') {
       speechSynthRef.current = window.speechSynthesis;
     }
     return () => {
@@ -98,55 +100,100 @@ export default function Home() {
         speechSynthRef.current.cancel();
       }
     };
+  }, [settings.ttsProvider]);
+
+  // Function to play an audio blob
+  const playAudioBlob = useCallback((blob: Blob) => {
+    if (playbackAudioRef.current) {
+      playbackAudioRef.current.pause();
+      playbackAudioRef.current.removeAttribute('src');
+      playbackAudioRef.current = null;
+    }
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    playbackAudioRef.current = audio;
+    audio.play().catch(e => console.error("Error playing cached audio:", e));
+    audio.onended = () => URL.revokeObjectURL(url);
+    audio.onerror = () => URL.revokeObjectURL(url);
   }, []);
 
-  // Speak the current name when it changes - UPDATED FOR OPENAI
+  // --- Modified Speech Effect Hook ---
   useEffect(() => {
-    console.log(`[Speech Effect] Name: ${currentName}, Provider: ${settings.ttsProvider}, API Key State: ${openaiApiKey ? 'Set' : 'Empty'}`);
+    console.log(`[Speech Effect] Name: ${currentName}, Provider: ${settings.ttsProvider}`);
 
-    if (!currentName || settings.isFullscreen) {
-      console.log('[Speech Effect] Bailing out (no name or fullscreen).');
-      // Ensure browser speech stops if we bail out
-      if (speechSynthRef.current) {
-         speechSynthRef.current.cancel();
-      }
-      // TODO: Need a way to stop ongoing OpenAI audio if bailing out
+    // Stop any previous audio (browser or cached)
+    if (speechSynthRef.current) speechSynthRef.current.cancel();
+    if (playbackAudioRef.current) playbackAudioRef.current.pause();
+
+    if (!currentName || !settings.speech?.enabled || settings.isFullscreen) {
+      console.log('[Speech Effect] Bailing out (no name, speech disabled, or fullscreen).');
       return;
     }
 
-    if (settings.ttsProvider === 'openai') {
-      console.log('[Speech Effect] Provider is OpenAI.');
-      // Cancel browser speech
-      if (speechSynthRef.current) {
-         speechSynthRef.current.cancel();
-      }
-      // Call OpenAI hook
-      if (openaiApiKey) {
-        console.log('[Speech Effect] Calling speakWithOpenAI...');
-        speakWithOpenAI(currentName);
-      } else {
-        console.warn('[Speech Effect] OpenAI selected but API Key is missing.');
-      }
-    } else if (settings.ttsProvider === 'browser') {
-      console.log('[Speech Effect] Provider is Browser.');
-      // TODO: Need a way to stop ongoing OpenAI audio if switching to browser
-      if (speechSynthRef.current && settings.speech?.enabled) {
-        console.log('[Speech Effect] Browser speech enabled, speaking...');
-        speechSynthRef.current.cancel();
-        const utterance = new SpeechSynthesisUtterance(currentName);
-        utterance.rate = settings.speech?.rate ?? 1.0;
-        utterance.pitch = settings.speech?.pitch ?? 1.0;
-        utterance.volume = settings.speech?.volume ?? 1.0;
-        speechSynthRef.current.speak(utterance);
-      } else {
-        console.log('[Speech Effect] Browser speech disabled or unavailable.');
-        if (speechSynthRef.current) {
-          speechSynthRef.current.cancel();
+    // --- Handle TTS Providers ---
+    (async () => {
+      if (settings.ttsProvider === 'openai' || settings.ttsProvider === 'elevenlabs') {
+        console.log(`[Speech Effect] Attempting to play cached audio for: "${currentName}"`);
+        try {
+          const cachedBlob = await getCachedAudioBlob(currentName);
+          if (cachedBlob) {
+            console.log(`[Speech Effect] Cache hit! Playing blob for "${currentName}".`);
+            playAudioBlob(cachedBlob);
+          } else {
+            console.warn(`[Speech Effect] Cache miss for "${currentName}". No audio played.`);
+            // Optional Fallback: Call on-demand API - uncomment if desired
+            // console.log(`[Speech Effect] Falling back to on-demand API for "${currentName}"...`);
+            // if (settings.ttsProvider === 'openai' && openaiApiKey) {
+            //   speakWithOpenAI(currentName);
+            // } else if (settings.ttsProvider === 'elevenlabs' && elevenLabsApiKey && settings.elevenLabsSettings?.voiceId) {
+            //   speakWithElevenLabs(currentName);
+            // }
+          }
+        } catch (error) {
+          console.error(`[Speech Effect] Error retrieving cached audio for "${currentName}":`, error);
+        }
+
+      } else if (settings.ttsProvider === 'browser') {
+        console.log('[Speech Effect] Provider is Browser. Speaking...');
+        if (speechSynthRef.current) { 
+          const utterance = new SpeechSynthesisUtterance(currentName);
+          utterance.rate = settings.speech?.rate ?? 1.0;
+          utterance.pitch = settings.speech?.pitch ?? 1.0;
+          utterance.volume = settings.speech?.volume ?? 1.0;
+          speechSynthRef.current.speak(utterance);
+        } else {
+          console.warn('[Speech Effect] Browser speech synthesis not available.');
         }
       }
-    }
+    })(); // Immediately invoke async function
 
-  }, [currentName, settings.ttsProvider, settings.speech, settings.openaiSettings, settings.isFullscreen, openaiApiKey, speakWithOpenAI]);
+    // Cleanup function to stop audio if dependencies change mid-playback
+    return () => {
+       if (speechSynthRef.current) speechSynthRef.current.cancel();
+       if (playbackAudioRef.current) playbackAudioRef.current.pause();
+    };
+
+  }, [
+    currentName, 
+    settings.ttsProvider, 
+    settings.speech, // Include whole speech object
+    settings.isFullscreen,
+    playAudioBlob // Include helper function
+    // Removed API keys and speak functions as primary dependencies, only used in optional fallback
+  ]);
+
+   // Cleanup audio ref on unmount
+   useEffect(() => {
+       return () => {
+           if (playbackAudioRef.current) {
+               playbackAudioRef.current.pause();
+               if (playbackAudioRef.current.src) {
+                   URL.revokeObjectURL(playbackAudioRef.current.src);
+               }
+               playbackAudioRef.current = null;
+           }
+       };
+   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: async (acceptedFiles) => {
