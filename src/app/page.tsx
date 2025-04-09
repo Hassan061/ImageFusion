@@ -16,6 +16,7 @@ import { useStore } from '@/store/slideshowStore';
 import NameManager from '@/components/NameManager';
 import Settings from '@/components/Settings';
 import Onboarding from '@/components/Onboarding';
+import { useOpenAITTS } from '@/hooks/useOpenAITTS';
 
 export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -34,6 +35,8 @@ export default function Home() {
   const textRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef({ mouseX: 0, mouseY: 0, posX: 0, posY: 0 });
   const speechSynthRef = useRef<SpeechSynthesis | null>(null);
+  // State to hold the API key read from sessionStorage
+  const [openaiApiKey, setOpenaiApiKey] = useState<string>('');
 
   const {
     images,
@@ -49,6 +52,20 @@ export default function Home() {
 
   // Get theme from settings
   const { theme } = settings;
+
+  // Read OpenAI API key from sessionStorage when component mounts or ttsProvider changes
+  useEffect(() => {
+    if (settings.ttsProvider === 'openai') {
+      const storedKey = sessionStorage.getItem('openaiApiKey');
+      setOpenaiApiKey(storedKey || '');
+    } else {
+      // Clear the key state if OpenAI is not selected
+      setOpenaiApiKey('');
+    }
+  }, [settings.ttsProvider]);
+
+  // Instantiate the correct hook based on provider
+  const { speak: speakWithOpenAI } = useOpenAITTS(openaiApiKey, settings.openaiSettings);
 
   // Update the current name
   const updateCurrentName = () => {
@@ -71,42 +88,65 @@ export default function Home() {
     }
   }, [images]);
 
-  // Initialize speech synthesis
+  // Initialize browser speech synthesis
   useEffect(() => {
     if (typeof window !== 'undefined') {
       speechSynthRef.current = window.speechSynthesis;
     }
     return () => {
-      // Cancel any ongoing speech when component unmounts
       if (speechSynthRef.current) {
         speechSynthRef.current.cancel();
       }
     };
   }, []);
 
-  // Speak the current name when it changes
+  // Speak the current name when it changes - UPDATED FOR OPENAI
   useEffect(() => {
-    if (
-      currentName && 
-      speechSynthRef.current && 
-      settings.speech?.enabled &&
-      !settings.isFullscreen // Only speak when not in fullscreen mode
-    ) {
-      // Cancel any ongoing speech
-      speechSynthRef.current.cancel();
-      
-      // Create a new utterance
-      const utterance = new SpeechSynthesisUtterance(currentName);
-      
-      // Apply speech settings
-      utterance.rate = settings.speech?.rate ?? 1.0;
-      utterance.pitch = settings.speech?.pitch ?? 1.0;
-      utterance.volume = settings.speech?.volume ?? 1.0;
-      
-      // Speak the name
-      speechSynthRef.current.speak(utterance);
+    console.log(`[Speech Effect] Name: ${currentName}, Provider: ${settings.ttsProvider}, API Key State: ${openaiApiKey ? 'Set' : 'Empty'}`);
+
+    if (!currentName || settings.isFullscreen) {
+      console.log('[Speech Effect] Bailing out (no name or fullscreen).');
+      // Ensure browser speech stops if we bail out
+      if (speechSynthRef.current) {
+         speechSynthRef.current.cancel();
+      }
+      // TODO: Need a way to stop ongoing OpenAI audio if bailing out
+      return;
     }
-  }, [currentName, settings.speech, settings.isFullscreen]);
+
+    if (settings.ttsProvider === 'openai') {
+      console.log('[Speech Effect] Provider is OpenAI.');
+      // Cancel browser speech
+      if (speechSynthRef.current) {
+         speechSynthRef.current.cancel();
+      }
+      // Call OpenAI hook
+      if (openaiApiKey) {
+        console.log('[Speech Effect] Calling speakWithOpenAI...');
+        speakWithOpenAI(currentName);
+      } else {
+        console.warn('[Speech Effect] OpenAI selected but API Key is missing.');
+      }
+    } else if (settings.ttsProvider === 'browser') {
+      console.log('[Speech Effect] Provider is Browser.');
+      // TODO: Need a way to stop ongoing OpenAI audio if switching to browser
+      if (speechSynthRef.current && settings.speech?.enabled) {
+        console.log('[Speech Effect] Browser speech enabled, speaking...');
+        speechSynthRef.current.cancel();
+        const utterance = new SpeechSynthesisUtterance(currentName);
+        utterance.rate = settings.speech?.rate ?? 1.0;
+        utterance.pitch = settings.speech?.pitch ?? 1.0;
+        utterance.volume = settings.speech?.volume ?? 1.0;
+        speechSynthRef.current.speak(utterance);
+      } else {
+        console.log('[Speech Effect] Browser speech disabled or unavailable.');
+        if (speechSynthRef.current) {
+          speechSynthRef.current.cancel();
+        }
+      }
+    }
+
+  }, [currentName, settings.ttsProvider, settings.speech, settings.openaiSettings, settings.isFullscreen, openaiApiKey, speakWithOpenAI]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: async (acceptedFiles) => {

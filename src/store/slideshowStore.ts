@@ -6,7 +6,15 @@ interface NameTuple {
   lastName: string;
 }
 
-interface SlideshowState {
+// Define the settings structure for ElevenLabs
+interface ElevenLabsSettings {
+  voiceId: string; // Required Voice ID
+  model_id?: string; // Optional Model ID
+  // Add other potential settings like stability, similarity_boost, etc.
+}
+
+// Export the main state interface
+export interface SlideshowState {
   images: string[];
   names: NameTuple[];
   settings: {
@@ -28,13 +36,23 @@ interface SlideshowState {
       pitch: number;
       volume: number;
     };
+    ttsProvider: 'browser' | 'openai' | 'elevenlabs'; // Add elevenlabs as a provider
+    openaiSettings?: { // Make optional in case not used
+      model: 'tts-1' | 'tts-1-hd';
+      voice: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
+      speed: number; // 0.25 to 4.0
+    };
+    elevenLabsSettings?: ElevenLabsSettings; // Add settings for ElevenLabs
   };
+  // We will store API keys in sessionStorage, not in the persisted state
+  // elevenLabsApiKey: string | null; // Not persisted
   addImage: (image: string) => void;
   removeImage: (index: number) => void;
   clearImages: () => void;
   addName: (firstName: string, lastName: string) => void;
   removeName: (index: number) => void;
   updateSettings: (settings: Partial<SlideshowState['settings']>) => void;
+  // setElevenLabsApiKey: (key: string | null) => void; // Action to set key (managed in component state + sessionStorage)
   getRandomImageIndex: () => number | null;
   getRandomNamePermutation: () => string;
 }
@@ -73,6 +91,16 @@ const DEFAULT_SETTINGS = {
     rate: 1.0,
     pitch: 1.0,
     volume: 1.0
+  },
+  ttsProvider: 'browser' as const, // Default to browser
+  openaiSettings: {
+    model: 'tts-1' as const,
+    voice: 'alloy' as const,
+    speed: 1.0,
+  },
+  elevenLabsSettings: { // Default ElevenLabs settings
+    voiceId: '21m00Tcm4TlvDq8ikWAM', // Default to a common voice like "Rachel"
+    model_id: 'eleven_monolingual_v1'
   }
 };
 
@@ -82,6 +110,7 @@ export const useStore = create<SlideshowState>()(
       images: [],
       names: DEFAULT_NAMES,
       settings: DEFAULT_SETTINGS,
+      // elevenLabsApiKey: null, // Initial state for API key (managed locally)
       addImage: (image) =>
         set((state) => {
           // If we've reached the limit, remove the oldest image
@@ -111,8 +140,18 @@ export const useStore = create<SlideshowState>()(
         })),
       updateSettings: (newSettings) =>
         set((state) => ({
-          settings: { ...state.settings, ...newSettings },
+          settings: {
+            ...state.settings,
+            ...newSettings,
+            // Ensure nested objects are merged correctly
+            ...(newSettings.speech && { speech: { ...state.settings.speech, ...newSettings.speech } }),
+            // Ensure openaiSettings is merged correctly
+            ...(newSettings.openaiSettings && { openaiSettings: { ...(state.settings.openaiSettings ?? {}), ...newSettings.openaiSettings } }),
+            // Ensure elevenLabsSettings is merged correctly
+            ...(newSettings.elevenLabsSettings && { elevenLabsSettings: { ...(state.settings.elevenLabsSettings ?? {}), ...newSettings.elevenLabsSettings } })
+          }
         })),
+      // setElevenLabsApiKey: (key) => set({ elevenLabsApiKey: key }), // Action managed locally
       getRandomImageIndex: () => {
         const state = get();
         const { settings, images } = state;
@@ -152,7 +191,13 @@ export const useStore = create<SlideshowState>()(
       partialize: (state) => ({
         images: state.images,
         names: state.names,
-        settings: state.settings,
+        settings: {
+          ...state.settings,
+          // Exclude API keys from persisted state
+          // Make settings objects optional in partial state if they can be undefined initially
+          openaiSettings: state.settings.openaiSettings ? { ...state.settings.openaiSettings } : undefined,
+          elevenLabsSettings: state.settings.elevenLabsSettings ? { ...state.settings.elevenLabsSettings } : undefined,
+        }
       }),
     }
   )
